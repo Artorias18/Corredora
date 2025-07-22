@@ -1,7 +1,7 @@
-from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada
+from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, actualizar_estado_venta, obtener_ventas_por_estado
 from PySide6.QtCore import Qt, QDate, Signal
-from PySide6.QtGui import QIntValidator
+from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuarlo_actual import UsuarioActual
 from services.supabase_client import supabase
 
@@ -10,192 +10,487 @@ from services.supabase_client import supabase
 class DetalleVentaWindow(QWidget):
     def __init__(self, venta_id, rol):
         super().__init__()
-        self.rol = rol 
-        self.setWindowTitle("Detalle de Venta")
-        self.setMinimumSize(800, 600)
+        self.venta_id = venta_id
+        self.rol = rol
+        self.setWindowTitle(f"Detalle de Venta #{venta_id}")
+        self.resize(900, 700)
         
-        # Crear scroll area
+        # Layout principal con scroll
+        layout_principal = QVBoxLayout(self)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        contenido = QWidget()
+        scroll.setWidget(contenido)
+        layout_principal.addWidget(scroll)
         
-        # Widget contenido
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        # Layout del contenido
+        layout_contenido = QVBoxLayout(contenido)
         
-        # Obtener datos
-        detalle = obtener_detalle_venta(venta_id)
+        # Obtener datos de la venta
+        self.detalle_venta = obtener_detalle_venta(venta_id)
         
-        # Mapeo de nombres amigables
-        names = {
-            "id": "ID",
-            "comprador_nombre": "Nombre Comprador",
-            "comprador_rut": "RUT Comprador",
-            "comprador_direccion": "Dirección Comprador",
-            "comprador_telefono": "Teléfono Comprador",
-            "comprador_correo_electronico": "Correo Electrónico Comprador",
-            "comprador_banco": "Banco Comprador",
-            "comprador_tipo_cuenta": "Tipo Cuenta Comprador",
-            "comprador_nro_cuenta": "Número Cuenta Comprador",
-            "comprador_poder_judicial": "Poder Judicial Comprador",
-            "vendedor_nombre": "Nombre Vendedor",
-            "vendedor_rut": "RUT Vendedor",
-            "vendedor_direccion": "Dirección Vendedor",
-            "vendedor_telefono": "Teléfono Vendedor",
-            "vendedor_correo_electronico": "Correo Electrónico Vendedor",
-            "vendedor_banco": "Banco Vendedor",
-            "vendedor_tipo_cuenta": "Tipo Cuenta Vendedor",
-            "vendedor_nro_cuenta": "Número Cuenta Vendedor",
-            "vendedor_poder_judicial": "Poder Judicial Vendedor",
-            "vendedor_posesion_efectiva": "Posesión Efectiva Vendedor",
-            "propiedad_direccion": "Dirección Propiedad",
-            "propiedad_rol": "ROL Propiedad",
-            "propiedad_comuna": "Comuna Propiedad",
-            "propiedad_estudio_titulos": "Estudio de Títulos",
-            "propiedad_inscripcion": "Inscripción",
-            "propiedad_dominio_vigente": "Dominio Vigente",
-            "propiedad_hipoteca": "Hipoteca",
-            "propiedad_gravamen": "Gravamen",
-            "propiedad_certificado_numero": "Certificado Número",
-            "propiedad_aseo": "Aseo",
-            "propiedad_no_expropiacion": "No Expropiación",
-            "fecha_venta": "Fecha de Venta",
-            "monto_venta": "Monto Venta",
-            "observaciones": "Observaciones",
-            "estado_venta": "Estado Venta",
-            "tipo_venta": "Tipo Venta",
-            "limitaciones_dominio": "Limitaciones Dominio",
-            "viabilidad_vendedor": "Viabilidad Vendedor",
-            "superficie": "Superficie",
-            "edificada": "Edificada",
-            "recepcion": "Recepción"
-        }
+        if not self.detalle_venta:
+            layout_contenido.addWidget(QLabel("No se encontraron detalles para esta venta"))
+            return
         
-        if detalle:
-            # Agrupar campos por secciones
-            sections = {
-                "Información General": [
-                    "id", "fecha_venta", "monto_venta", "observaciones",
-                    "estado_venta", "tipo_venta"
-                ],
-                "Comprador": [
-                    "comprador_nombre", "comprador_rut", "comprador_direccion",
-                    "comprador_telefono", "comprador_correo_electronico",
-                    "comprador_banco", "comprador_tipo_cuenta", "comprador_nro_cuenta",
-                    "comprador_poder_judicial"
-                ],
-                "Vendedor": [
-                    "vendedor_nombre", "vendedor_rut", "vendedor_direccion",
-                    "vendedor_telefono", "vendedor_correo_electronico",
-                    "vendedor_banco", "vendedor_tipo_cuenta", "vendedor_nro_cuenta",
-                    "vendedor_poder_judicial", "vendedor_posesion_efectiva"
-                ],
-                "Propiedad": [
-                    "propiedad_direccion", "propiedad_rol", "propiedad_comuna",
-                    "propiedad_estudio_titulos", "propiedad_inscripcion",
-                    "propiedad_dominio_vigente", "propiedad_hipoteca",
-                    "propiedad_gravamen", "propiedad_certificado_numero",
-                    "propiedad_aseo", "propiedad_no_expropiacion"
-                ],
-                "Documentación": [
-                    "limitaciones_dominio", "viabilidad_vendedor",
-                    "superficie", "edificada", "recepcion"
-                ]
-            }
+        # Mostrar información en pestañas
+        self.tabs = QTabWidget()
+        layout_contenido.addWidget(self.tabs)
+        
+        # Pestaña de información general
+        self.setup_tab_info_general()
+        
+        # Pestaña de comprador
+        self.setup_tab_comprador()
+        
+        # Pestaña de vendedor
+        self.setup_tab_vendedor()
+        
+        # Pestaña de propiedad
+        self.setup_tab_propiedad()
+        
+        # Pestaña de posesión efectiva (si aplica)
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') == 'Posesion Efectiva':
+            self.setup_tab_pos_efectiva()
+        
+        # Botón para cerrar
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.clicked.connect(self.close)
+        layout_contenido.addWidget(btn_cerrar)
+    
+    def setup_tab_info_general(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Información General")
+        layout = QFormLayout(tab)
+        
+        venta = self.detalle_venta.get('venta', {})
+        
+        # Campos de información general
+        campos = [
+            ("ID Venta", venta.get('id')),
+            ("Fecha", venta.get('fecha_venta')),
+            ("Monto", f"${venta.get('monto_venta', 0):,.0f}" if venta.get('monto_venta') else "No especificado"),
+            ("Tipo de venta", venta.get('tipo_venta')),
+            ("Estado", venta.get('estado_venta', '').capitalize()),
+            ("Propiedad ofrecida", venta.get('propiedad_ofrecida')),
+            ("Regularizaciones", venta.get('regularizaciones')),
+            ("Observaciones", venta.get('observaciones'))
+        ]
+        
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+    
+    def setup_tab_comprador(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Comprador")
+        layout = QFormLayout(tab)
+        
+        comprador = self.detalle_venta.get('comprador', {})
+        
+        # Campos del comprador
+        campos = [
+            ("Nombre", comprador.get('nombre')),
+            ("RUT", comprador.get('rut')),
+            ("Dirección", comprador.get('direccion')),
+            ("Teléfono", comprador.get('telefono')),
+            ("Email", comprador.get('correo_electronico')),
+            ("Banco", comprador.get('banco')),
+            ("Tipo de cuenta", comprador.get('tipo_cuenta')),
+            ("Número de cuenta", comprador.get('nro_cuenta')),
+            ("Poder judicial", comprador.get('poder_judicial'))
+        ]
+        
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+    
+    def setup_tab_vendedor(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Vendedor")
+        layout = QFormLayout(tab)
+        
+        vendedor = self.detalle_venta.get('vendedor', {})
+        
+        # Campos del vendedor
+        campos = [
+            ("Nombre", vendedor.get('nombre')),
+            ("RUT", vendedor.get('rut')),
+            ("Dirección", vendedor.get('direccion')),
+            ("Teléfono", vendedor.get('telefono')),
+            ("Email", vendedor.get('correo_electronico')),
+            ("Banco", vendedor.get('banco')),
+            ("Tipo de cuenta", vendedor.get('tipo_cuenta')),
+            ("Número de cuenta", vendedor.get('nro_cuenta')),
+            ("Poder judicial", vendedor.get('poder_judicial')),
+            ("Posesión efectiva", vendedor.get('posesion_efectiva'))
+        ]
+        
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+    
+    def setup_tab_propiedad(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Propiedad")
+        layout = QVBoxLayout(tab)
+        
+        propiedad = self.detalle_venta.get('propiedad', {})
+        documentacion = self.detalle_venta.get('documentacion', {})
+        
+        # Información básica
+        form_basica = QFormLayout()
+        campos_basicos = [
+            ("Código interno", propiedad.get('codigo_interno')),
+            ("Dirección", propiedad.get('direccion')),
+            ("ROL", propiedad.get('rol')),
+            ("Comuna", propiedad.get('comuna'))
+        ]
+        
+        for label, value in campos_basicos:
+            if value:
+                form_basica.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+        
+        layout.addLayout(form_basica)
+        
+        # Documentación
+        layout.addWidget(QLabel("<b>Documentación:</b>"))
+        
+        form_doc = QFormLayout()
+        campos_doc = [
+            ("Estudio de títulos", propiedad.get('estudio_titulos')),
+            ("Inscripción", propiedad.get('inscripcion')),
+            ("Dominio vigente", propiedad.get('dominio_vigente')),
+            ("Hipoteca", propiedad.get('hipoteca')),
+            ("Gravamen", propiedad.get('gravamen')),
+            ("Certificado número", propiedad.get('certificado_numero')),
+            ("Aseo", propiedad.get('aseo')),
+            ("No expropiación", propiedad.get('no_expropiacion')),
+            ("Superficie", documentacion.get('superficie')),
+            ("Edificada", documentacion.get('edificada')),
+            ("Recepción", documentacion.get('recepcion'))
+        ]
+        
+        for label, value in campos_doc:
+            if value:
+                form_doc.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+        
+        layout.addLayout(form_doc)
+    
+    def setup_tab_pos_efectiva(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Posesión Efectiva")
+        layout = QVBoxLayout(tab)
+        
+        # Obtener herederos de la venta
+        herederos_response = supabase.table("herederos").select("*").eq("venta_id", self.venta_id).execute()
+        herederos = herederos_response.data if herederos_response.data else []
+        
+        if not herederos:
+            layout.addWidget(QLabel("No hay información de posesión efectiva disponible"))
+            return
+        
+        # Información de posesión efectiva
+        posesion_response = supabase.table("posesion_efectiva").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        posesion = posesion_response.data[0] if posesion_response.data else {}
+        
+        if posesion:
+            form_pos = QFormLayout()
+            campos_pos = [
+                ("Tipo", posesion.get('tipo_posesion', '').capitalize()),
+                ("Canal", posesion.get('canal', '').capitalize()),
+                ("Estado del proceso", posesion.get('estado_proceso', '').capitalize())
+            ]
             
-            for section, fields in sections.items():
-                # Añadir título de sección
-                section_label = QLabel(f"<h3>{section}</h3>")
-                layout.addWidget(section_label)
-                
-                # Añadir campos de la sección
-                for field in fields:
-                    if field in detalle and (self.rol.lower() in ("superusuario", "admin") or field != "monto_venta"):
-                        show_name = names.get(field, field)
-                        value = detalle[field]
-                        
-                        # Formatear valores booleanos
-                        if isinstance(value, bool):
-                            value = "Sí" if value else "No"
-                        elif value is None:
-                            value = "No especificado"
-                            
-                        field_layout = QHBoxLayout()
-                        field_layout.addWidget(QLabel(f"{show_name}:"), stretch=1)
-                        field_layout.addWidget(QLabel(str(value)), stretch=2)
-                        layout.addLayout(field_layout)
-                
-                # Añadir separador
-                layout.addWidget(QFrame(frameShape=QFrame.HLine))
+            for label, value in campos_pos:
+                form_pos.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+            
+            layout.addLayout(form_pos)
         
-        scroll.setWidget(content_widget)
-        main_layout = QVBoxLayout(self)
-        main_layout.addWidget(scroll)
-        self.setLayout(main_layout)
+        # Tabla de herederos
+        layout.addWidget(QLabel("<b>Herederos:</b>"))
+        
+        tabla = QTableWidget(len(herederos), 4)
+        tabla.setHorizontalHeaderLabels(["Nombre", "RUT", "Tipo", "Porcentaje"])
+        
+        for row, heredero in enumerate(herederos):
+            tabla.setItem(row, 0, QTableWidgetItem(heredero.get('nombre', '')))
+            tabla.setItem(row, 1, QTableWidgetItem(heredero.get('rut', '')))
+            tabla.setItem(row, 2, QTableWidgetItem(heredero.get('tipo_heredero', '').capitalize()))
+            tabla.setItem(row, 3, QTableWidgetItem(f"{heredero.get('porcentaje', 0)}%"))
+        
+        tabla.resizeColumnsToContents()
+        layout.addWidget(tabla)
 
 class DashboardVentas(QMainWindow):
     def __init__(self, rol, parent=None):
         super().__init__(parent)
         self.rol = rol
-        self.setWindowTitle("Ventas")
+        self.setWindowTitle("Gestión de Ventas")
         self.resize(1200, 800)
+        self.cargando_tabla = False
         
-        # Widget central y layout principal
+        # Widget central
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         
-        # Barra de búsqueda y filtros
+        # Barra de filtros
         filter_layout = QHBoxLayout()
+        
+        # Filtro de búsqueda
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Buscar...")
+        self.search_input.setPlaceholderText("Buscar por comprador, vendedor o propiedad...")
         self.search_input.textChanged.connect(self.filtrar_ventas)
         
-        # Filtro por fecha
-        self.date_filter = QComboBox()
-        self.date_filter.addItems(["Todas las fechas", "Últimos 7 días", "Últimos 30 días", "Este año"])
-        self.date_filter.currentIndexChanged.connect(self.filtrar_ventas)
         
+        # Filtro de estado
+        self.filtro_estado = QComboBox()
+        self.filtro_estado.addItems([
+            "Todas las ventas",
+            "En proceso",
+            "Negociandose", 
+            "Cerradas verbalmente",
+            "Cerradas en notaría",
+            "Inscritas"
+        ])
+        self.filtro_estado.currentIndexChanged.connect(self.filtrar_ventas)
+        
+        # Filtro de fecha
+        self.filtro_fecha = QComboBox()
+        self.filtro_fecha.addItems([
+            "Todas las fechas",
+            "Últimos 7 días",
+            "Últimos 30 días",
+            "Este mes",
+            "Este año"
+        ])
+        self.filtro_fecha.currentIndexChanged.connect(self.filtrar_ventas)
+        
+        # Agregar filtros al layout
         filter_layout.addWidget(QLabel("Filtros:"))
         filter_layout.addWidget(self.search_input)
-        filter_layout.addWidget(self.date_filter)
+        filter_layout.addWidget(QLabel("Estado:"))
+        filter_layout.addWidget(self.filtro_estado)
+        filter_layout.addWidget(QLabel("Fecha:"))
+        filter_layout.addWidget(self.filtro_fecha)
+        
         main_layout.addLayout(filter_layout)
         
-        # Configurar la tabla
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["ID", "Comprador", "Vendedor", "Propiedad", "Fecha"])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSortingEnabled(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.table.verticalHeader().setVisible(False)
-        self.table.itemDoubleClicked.connect(self.mostrar_detalle_venta)
+        # Tabla de ventas
+        self.tabla_ventas = QTableWidget()
+        self.tabla_ventas.setColumnCount(7)
+        self.tabla_ventas.setHorizontalHeaderLabels([
+            "ID", 
+            "Comprador", 
+            "Vendedor", 
+            "Propiedad", 
+            "Fecha", 
+            "Estado",
+            "Tipo"
+        ])
+        self.tabla_ventas.setSortingEnabled(True)
+        self.tabla_ventas.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.tabla_ventas.setEditTriggers(QAbstractItemView.DoubleClicked)
+        self.tabla_ventas.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.tabla_ventas.verticalHeader().setVisible(False)
+        self.tabla_ventas.itemDoubleClicked.connect(self.mostrar_detalle_venta)
+        self.tabla_ventas.itemChanged.connect(self.actualizar_estado_venta)
         
-        # Botones
+        main_layout.addWidget(self.tabla_ventas)
+        
+        # Barra de botones
         button_layout = QHBoxLayout()
-        self.boton_agregar = QPushButton("Agregar Venta")
-        self.boton_agregar.clicked.connect(self.abrir_ventana_agregar_venta)
         
-        self.boton_exportar = QPushButton("Exportar a Excel")
-        self.boton_exportar.clicked.connect(self.exportar_a_excel)
+        self.btn_agregar_proceso = QPushButton("Nueva Venta en Proceso")
+        self.btn_agregar_proceso.clicked.connect(lambda: self.abrir_formulario_venta(en_proceso=True))
+        
+        self.btn_agregar_cerrada = QPushButton("Nueva Venta Cerrada")
+        self.btn_agregar_cerrada.clicked.connect(lambda: self.abrir_formulario_venta(en_proceso=False))
+        
+        self.btn_actualizar = QPushButton("Actualizar Lista")
+        self.btn_actualizar.clicked.connect(self.cargar_ventas)
+        
+        self.btn_exportar = QPushButton("Exportar a Excel")
+        self.btn_exportar.clicked.connect(self.exportar_a_excel)
         
         if self.rol.lower() in ("superusuario", "admin"):
-            self.boton_eliminar = QPushButton("Eliminar Venta")
-            self.boton_eliminar.clicked.connect(self.eliminar_venta)
-            button_layout.addWidget(self.boton_eliminar)
+            self.btn_editar_estado = QPushButton("Cambiar Estado")
+            self.btn_editar_estado.clicked.connect(self.habilitar_edicion_estado)
+            button_layout.addWidget(self.btn_editar_estado)
         
-        button_layout.addWidget(self.boton_agregar)
-        button_layout.addWidget(self.boton_exportar)
+        button_layout.addWidget(self.btn_agregar_proceso)
+        button_layout.addWidget(self.btn_agregar_cerrada)
+        button_layout.addWidget(self.btn_actualizar)
+        button_layout.addWidget(self.btn_exportar)
         
-        main_layout.addWidget(self.table)
         main_layout.addLayout(button_layout)
         
+        # Cargar datos iniciales
         self.cargar_ventas()
     
-    def abrir_ventana_agregar_venta(self):
-        self.ventana_agregar = VentanaAgregarVenta()
-        self.ventana_agregar.venta_guardada.connect(self.cargar_ventas)  # recargar al cerrar
-        self.ventana_agregar.show()
+    def cargar_ventas(self):
+        try:
+            self.cargando_tabla = True
+            # Desconectar signal para no disparar itemChanged mientras cargas
+            try:
+                self.tabla_ventas.itemChanged.disconnect(self.actualizar_estado_venta)
+            except TypeError:
+                pass  # Si no está conectado, ignora
+
+            self.tabla_ventas.setRowCount(0)
+            estado_filtro = self.filtro_estado.currentText()
+
+            if estado_filtro == "Todas las ventas":
+                ventas = obtener_ventas_resumen()
+            else:
+                ventas = obtener_ventas_por_estado(estado_filtro)
+
+            if ventas:
+                self.tabla_ventas.setRowCount(len(ventas))
+
+                for row, venta in enumerate(ventas):
+                    id_item = QTableWidgetItem(str(venta.get("id", "")))
+                    comprador_item = QTableWidgetItem(venta.get("comprador", ""))
+                    vendedor_item = QTableWidgetItem(venta.get("vendedor", ""))
+                    propiedad_item = QTableWidgetItem(venta.get("propiedad", ""))
+                    fecha_item = QTableWidgetItem(venta.get("fecha_venta", ""))
+                    estado_item = QTableWidgetItem(venta.get("estado_venta", "").capitalize())
+                    estado_item.setFlags(estado_item.flags() | Qt.ItemIsEditable)
+                    tipo_item = QTableWidgetItem(venta.get("tipo_venta", ""))
+
+                    self.tabla_ventas.setItem(row, 0, id_item)
+                    self.tabla_ventas.setItem(row, 1, comprador_item)
+                    self.tabla_ventas.setItem(row, 2, vendedor_item)
+                    self.tabla_ventas.setItem(row, 3, propiedad_item)
+                    self.tabla_ventas.setItem(row, 4, fecha_item)
+                    self.tabla_ventas.setItem(row, 5, estado_item)
+                    self.tabla_ventas.setItem(row, 6, tipo_item)
+
+                self.tabla_ventas.resizeColumnsToContents()
+
+            # Reconectar el signal cuando termines
+            self.tabla_ventas.itemChanged.connect(self.actualizar_estado_venta)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudieron cargar las ventas: {str(e)}")
+
+        finally:
+            self.cargando_tabla = False
+
+    
+
+    
+    def filtrar_ventas(self):
+        texto = self.search_input.text().lower()
+        estado = self.filtro_estado.currentText()
+        fecha = self.filtro_fecha.currentText()
+        
+        for row in range(self.tabla_ventas.rowCount()):
+            mostrar_fila = True
+            
+            # Filtrar por texto
+            if texto:
+                mostrar_fila = any(
+                    texto in self.tabla_ventas.item(row, col).text().lower()
+                    for col in range(self.tabla_ventas.columnCount())
+                )
+            
+            # Filtrar por estado
+            if mostrar_fila and estado != "Todas las ventas":
+                estado_item = self.tabla_ventas.item(row, 5).text().lower()
+                estado_filtro = estado.lower().replace(" ", "_")
+                
+                if estado == "En proceso":
+                    mostrar_fila = estado_item == "en_proceso"
+                elif estado == "Negociandose":
+                    mostrar_fila = estado_item == "negociandose"
+                elif estado == "Cerradas verbalmente":
+                    mostrar_fila = estado_item == "cerrada verbalmente"
+                elif estado == "Cerradas en notaría":
+                    mostrar_fila = estado_item == "cerrada en notaria"
+                elif estado == "Inscritas":
+                    mostrar_fila = estado_item == "inscrita"
+            
+            # Filtrar por fecha
+            if mostrar_fila and fecha != "Todas las fechas":
+                fecha_item = self.tabla_ventas.item(row, 4).text()
+                fecha_venta = QDate.fromString(fecha_item, "yyyy-MM-dd")
+                hoy = QDate.currentDate()
+                
+                if fecha == "Últimos 7 días":
+                    mostrar_fila = fecha_venta.daysTo(hoy) <= 7
+                elif fecha == "Últimos 30 días":
+                    mostrar_fila = fecha_venta.daysTo(hoy) <= 30
+                elif fecha == "Este mes":
+                    mostrar_fila = fecha_venta.month() == hoy.month() and fecha_venta.year() == hoy.year()
+                elif fecha == "Este año":
+                    mostrar_fila = fecha_venta.year() == hoy.year()
+            
+            self.tabla_ventas.setRowHidden(row, not mostrar_fila)
+    
+    def abrir_formulario_venta(self, en_proceso=False):
+        self.formulario_venta = FormularioVenta(en_proceso=en_proceso)
+        self.formulario_venta.venta_guardada.connect(self.cargar_ventas)
+        self.formulario_venta.show()
+    
+    def mostrar_detalle_venta(self, item):
+        if item.column()==5:
+            return
+        venta_id = int(self.tabla_ventas.item(item.row(), 0).text())
+        self.ventana_detalle = DetalleVentaWindow(venta_id, self.rol)
+        self.ventana_detalle.show()
+    
+    def habilitar_edicion_estado(self):
+    # Habilitar edición solo en la columna de estado
+        for row in range(self.tabla_ventas.rowCount()):
+            item = self.tabla_ventas.item(row, 5)
+            if item:
+                item.setFlags(item.flags() | Qt.ItemIsEditable)
+        
+        # try:
+        #     self.tabla_ventas.itemChanged.disconnect(self.actualizar_estado_venta)
+        # except TypeError:
+        #     pass  # No estaba conectada, no pasa nada
+
+        # self.tabla_ventas.itemChanged.connect(self.actualizar_estado_venta)
+
+        QMessageBox.information(self, "Edición", "Puede editar el estado directamente en la tabla")
+
+    
+    def actualizar_estado_venta(self, item):
+        if self.cargando_tabla:
+            return  # Ignorar cambios que ocurren mientras se carga la tabla
+
+        if item.column() != 5:
+            return  # Solo procesar cambios en la columna Estado
+
+        venta_id = int(self.tabla_ventas.item(item.row(), 0).text())
+        nuevo_estado = item.text().lower()
+        print(f"Intentando actualizar venta_id={venta_id} con estado={nuevo_estado}")
+
+        try:
+            resultado = actualizar_estado_venta(venta_id, nuevo_estado)
+            print(f"Resultado actualización: {resultado}")
+            if resultado:
+                item.setText(nuevo_estado.capitalize())
+            else:
+                print("No se pudo actualizar el estado en la base de datos.")
+        except Exception as e:
+            print(f"Error en actualizar_estado_venta: {str(e)}")
+            QMessageBox.warning(self, "Error", f"No se pudo actualizar el estado: {str(e)}")
+            self.cargar_ventas()  # Recargar para revertir cambios
+
+
+
+    
+    def exportar_a_excel(self):
+        # Implementar exportación a Excel
+        pass
+
+    def eliminar_venta(self):
+        # Implementar eliminación segura
+        pass
 
     def get_user_role(self,user_id):
 
@@ -210,428 +505,568 @@ class DashboardVentas(QMainWindow):
         else:
             self.message_label.setText("Usuario no encontrado en la base de datos")
 
-    def cargar_ventas(self):
-        self.table.setRowCount(0)
-        ventas = obtener_ventas_resumen()
-        
-        if ventas:
-            self.table.setRowCount(len(ventas))
-            for row, venta in enumerate(ventas):
-                self.table.setItem(row, 0, QTableWidgetItem(str(venta["id"])))
-                self.table.setItem(row, 1, QTableWidgetItem(venta["comprador"]))
-                self.table.setItem(row, 2, QTableWidgetItem(venta["vendedor"]))
-                self.table.setItem(row, 3, QTableWidgetItem(venta["propiedad"]))
-                self.table.setItem(row, 4, QTableWidgetItem(str(venta["fecha_venta"])))
-        
-        # Ajustar columnas
-        self.table.resizeColumnsToContents()
-    def mostrar_detalle_venta(self, item):
-        row = item.row()
-        venta_id = int(self.table.item(row, 0).text())
-        self.detalle_window = DetalleVentaWindow(venta_id, self.rol)
-        self.detalle_window.show()
-
-
-        
-    def filtrar_ventas(self):
-        text = self.search_input.text().lower()
-        date_filter = self.date_filter.currentText()
-        
-        for row in range(self.table.rowCount()):
-            match_text = False
-            match_date = True
-            
-            # Filtrar por texto
-            if text:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(row, col)
-                    if item and text in item.text().lower():
-                        match_text = True
-                        break
-            else:
-                match_text = True
-            
-            # Filtrar por fecha
-            if date_filter != "Todas las fechas":
-                date_item = self.table.item(row, 5)  # Columna de fecha
-                if date_item:
-                    venta_date = QDate.fromString(date_item.text(), "yyyy-MM-dd")
-                    today = QDate.currentDate()
-                    
-                    if date_filter == "Últimos 7 días" and venta_date.daysTo(today) > 7:
-                        match_date = False
-                    elif date_filter == "Últimos 30 días" and venta_date.daysTo(today) > 30:
-                        match_date = False
-                    elif date_filter == "Este año" and venta_date.year() != today.year():
-                        match_date = False
-            
-            self.table.setRowHidden(row, not (match_text and match_date))
-    
-    def exportar_a_excel(self):
-        # Implementar exportación a Excel
-        pass
-    
-    def eliminar_venta(self):
-        # Implementar eliminación segura
-        pass
     
     
 
 
-class VentanaAgregarVenta(QWidget):
+class FormularioVenta(QWidget):
     venta_guardada = Signal()
-
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Agregar Venta")
-        self.resize(800, 600)
-
+    
+    def __init__(self, en_proceso=False, parent=None):
+        super().__init__(parent)
+        self.en_proceso = en_proceso
+        self.setWindowTitle("Nueva Venta en Proceso" if en_proceso else "Nueva Venta Cerrada")
+        self.resize(900, 700)
+        
+        # Layout principal con scroll
         layout_principal = QVBoxLayout(self)
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        layout_principal.addWidget(scroll_area)
-
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
         contenido = QWidget()
-        scroll_area.setWidget(contenido)
-        layout_contenido = QVBoxLayout(contenido)
-
-        self.formulario = QFormLayout()
-        layout_contenido.addLayout(self.formulario)
-
-        # === Comprador ===
-        self.comprador_nombre = QLineEdit()
-        self.comprador_rut = QLineEdit()
-        self.comprador_direccion = QLineEdit()
-        self.comprador_telefono = QLineEdit()
-        self.comprador_correo = QLineEdit()
-        self.comprador_banco = QLineEdit()
-        self.comprador_tipo_cuenta = QLineEdit()
-        self.comprador_nro_cuenta = QLineEdit()
-        self.comprador_nro_cuenta.setValidator(QIntValidator())
-        self.comprador_poder_judicial = QComboBox()
-        self.comprador_poder_judicial.addItems(["Si", "No"])
-
-        self.formulario.addRow("Nombre Comprador:", self.comprador_nombre)
-        self.formulario.addRow("RUT Comprador:", self.comprador_rut)
-        self.formulario.addRow("Dirección Comprador:", self.comprador_direccion)
-        self.formulario.addRow("Teléfono Comprador:", self.comprador_telefono)
-        self.formulario.addRow("Correo Comprador:", self.comprador_correo)
-        self.formulario.addRow("Poder Judicial:", self.comprador_poder_judicial)
-        self.formulario.addRow("Banco:", self.comprador_banco)
-        self.formulario.addRow("Tipo de Cuenta:", self.comprador_tipo_cuenta)
-        self.formulario.addRow("Numero de Cuenta:", self.comprador_nro_cuenta)
-
-        # === Vendedor ===
-        self.vendedor_nombre = QLineEdit()
-        self.vendedor_rut = QLineEdit()
-        self.vendedor_direccion = QLineEdit()
-        self.vendedor_telefono = QLineEdit()
-        self.vendedor_correo = QLineEdit()
-        self.vendedor_banco = QLineEdit()
-        self.vendedor_tipo_cuenta = QLineEdit()
-        self.vendedor_nro_cuenta = QLineEdit()
-        self.vendedor_nro_cuenta.setValidator(QIntValidator())
-
-        self.formulario.addRow("Nombre Vendedor:", self.vendedor_nombre)
-        self.formulario.addRow("RUT Vendedor:", self.vendedor_rut)
-        self.formulario.addRow("Dirección Vendedor:", self.vendedor_direccion)
-        self.formulario.addRow("Teléfono Vendedor:", self.vendedor_telefono)
-        self.formulario.addRow("Correo Vendedor:", self.vendedor_correo)
-        self.formulario.addRow("Banco:", self.vendedor_banco)
-        self.formulario.addRow("Tipo de Cuenta:", self.vendedor_tipo_cuenta)
-        self.formulario.addRow("Numero de Cuenta:", self.vendedor_nro_cuenta)
-
-        # === Propiedad ===
-        self.propiedad_codigo = QLineEdit()
-        self.propiedad_direccion = QLineEdit()
-        self.propiedad_rol = QLineEdit()
-        self.propiedad_comuna = QLineEdit()
-
-        # Campos documentales de propiedad con combobox
-        self.estudio_titulos = QComboBox()
-        self.estudio_titulos.addItems(["Si Posee Documento", "No Posee Documento"])
+        scroll.setWidget(contenido)
+        layout_principal.addWidget(scroll)
         
-        self.inscripcion = QComboBox()
-        self.inscripcion.addItems(["Si Posee Documento", "No Posee Documento"])
+        # Layout del formulario
+        layout_form = QVBoxLayout(contenido)
         
-        self.dominio_vigente = QComboBox()
-        self.dominio_vigente.addItems(["Si Posee Documento", "No Posee Documento"])
+        # Pestañas para organizar el formulario
+        self.tabs = QTabWidget()
+        layout_form.addWidget(self.tabs)
         
-        self.hipoteca = QComboBox()
-        self.hipoteca.addItems(["Si Posee Documento", "No Posee Documento"])
+        # Pestaña de información básica
+        tab_basica = QWidget()
+        self.tabs.addTab(tab_basica, "Información Básica")
+        self.setup_tab_basica(tab_basica)
         
-        self.gravamen = QComboBox()
-        self.gravamen.addItems(["Si Posee Documento", "No Posee Documento"])
+        # Pestaña de comprador
+        tab_comprador = QWidget()
+        self.tabs.addTab(tab_comprador, "Comprador")
+        self.setup_tab_comprador(tab_comprador)
         
-        self.certificado_numero = QComboBox()
-        self.certificado_numero.addItems(["Si Posee Documento", "No Posee Documento"])
+        # Pestaña de vendedor
+        tab_vendedor = QWidget()
+        self.tabs.addTab(tab_vendedor, "Vendedor")
+        self.setup_tab_vendedor(tab_vendedor)
         
-        self.aseo = QComboBox()
-        self.aseo.addItems(["Si Posee Documento", "No Posee Documento"])
+        # Pestaña de propiedad
+        tab_propiedad = QWidget()
+        self.tabs.addTab(tab_propiedad, "Propiedad")
+        self.setup_tab_propiedad(tab_propiedad)
         
-        self.no_expropiacion = QComboBox()
-        self.no_expropiacion.addItems(["Si Posee Documento", "No Posee Documento"])
-
-        self.superficie = QComboBox()
-        self.superficie.addItems(["Si Posee Documento", "No Posee Documento"])
-
-        self.edificada = QComboBox()
-        self.edificada.addItems(["Si Posee Documento", "No Posee Documento"])
-
-        self.recepcion = QComboBox()
-        self.recepcion.addItems(["Si Posee Documento", "No Posee Documento"])
-
-        self.formulario.addRow("Código Propiedad:", self.propiedad_codigo)
-        self.formulario.addRow("Dirección Propiedad:", self.propiedad_direccion)
-        self.formulario.addRow("Rol Propiedad:", self.propiedad_rol)
-        self.formulario.addRow("Comuna Propiedad:", self.propiedad_comuna)
+        # Pestaña de posesión efectiva (solo para ventas cerradas)
+        if not en_proceso:
+            tab_pos_efectiva = QWidget()
+            self.tabs.addTab(tab_pos_efectiva, "Posesión Efectiva")
+            self.setup_tab_pos_efectiva(tab_pos_efectiva)
+            index = self.tabs.indexOf(tab_pos_efectiva)
+            self.tabs.setTabVisible(index, False)
+            self.tab_pos_efectiva_index = index  
         
-        # Agregar campos documentales al formulario
-        self.formulario.addRow("Estudio de Títulos:", self.estudio_titulos)
-        self.formulario.addRow("Inscripción:", self.inscripcion)
-        self.formulario.addRow("Dominio Vigente:", self.dominio_vigente)
-        self.formulario.addRow("Hipoteca:", self.hipoteca)
-        self.formulario.addRow("Gravamen:", self.gravamen)
-        self.formulario.addRow("Certificado Número:", self.certificado_numero)
-        self.formulario.addRow("Aseo:", self.aseo)
-        self.formulario.addRow("No Expropiación:", self.no_expropiacion)
-        self.formulario.addRow("Prop Superficie:", self.superficie)
-        self.formulario.addRow("Prop Edificada:", self.edificada)
-        self.formulario.addRow("Prop Recepcion:", self.recepcion)
-
-        # === Venta ===
-        self.fecha_venta = QDateEdit(QDate.currentDate())
-        self.fecha_venta.setCalendarPopup(True)
-        self.monto_venta = QLineEdit()
-        self.observaciones = QLineEdit()
-
-        self.tipo_venta = QComboBox()
-        self.tipo_venta.addItems(["Efectivo", "Posesión Efectiva", "Subsidio", "Credito H.", "Credito H. + Subsidio"])
-        self.tipo_venta.currentTextChanged.connect(self.verificar_posesion)
-
-        self.estado_venta = QComboBox()
-        self.estado_venta.addItems(["Negociandose", "Cerrada Verbalmente", "Cerrada en Notaria", "Inscrita"])
+        # Botón de guardar
+        btn_guardar = QPushButton("Guardar Venta")
+        btn_guardar.clicked.connect(self.guardar_venta)
+        layout_form.addWidget(btn_guardar)
         
-        self.propiedad_ofrecida = QComboBox()
-        self.propiedad_ofrecida.addItems(["Si", "No"])
-        
-        self.regularizaciones = QComboBox()
-        self.regularizaciones.addItems(["Si", "No"])
-        
-        self.limitaciones = QComboBox()
-        self.limitaciones.addItems(["Si", "No"])
-        
-        self.viabilidad = QLineEdit()
-
-        self.formulario.addRow("Fecha Venta:", self.fecha_venta)
-        self.formulario.addRow("Monto Venta:", self.monto_venta)
-        self.formulario.addRow("Observaciones:", self.observaciones)
-        self.formulario.addRow("Tipo Venta:", self.tipo_venta)
-        self.formulario.addRow("Estado Venta:", self.estado_venta)
-        self.formulario.addRow("Propiedad Ofrecida:", self.propiedad_ofrecida)
-        self.formulario.addRow("Regularizaciones:", self.regularizaciones)
-        self.formulario.addRow("Limitaciones Dominio:", self.limitaciones)
-        self.formulario.addRow("Viabilidad Vendedor:", self.viabilidad)
-
-        # === Sección Posesión Efectiva ===
-
-        self.seccion_posesion = QWidget()
-        self.seccion_posesion.setVisible(False)
-        self.posesion_layout = QFormLayout(self.seccion_posesion)
-
-        self.tipo_posesion = QComboBox()
-        self.tipo_posesion.addItems(["Testada", "Intestada"])
-        self.tipo_posesion.currentTextChanged.connect(self.actualizar_herederos)
-
-        self.estado_proceso = QLineEdit()
-        self.canal = QLineEdit()
-        self.obs_posesion = QLineEdit()
-
-        self.posesion_layout.addRow("Tipo Posesión:", self.tipo_posesion)
-        self.posesion_layout.addRow("Estado Proceso:", self.estado_proceso)
-        self.posesion_layout.addRow("Canal:", self.canal)
-        self.posesion_layout.addRow("Observaciones Posesión:", self.obs_posesion)
-        layout_contenido.addWidget(self.seccion_posesion)
-
-        # === Herederos ===
-        self.tabla_herederos = QTableWidget(0, 3)
-        self.tabla_herederos.setHorizontalHeaderLabels(["Nombre", "RUT", "Tipo Heredero"])
-        self.tabla_herederos.setVisible(False)
-        layout_contenido.addWidget(self.tabla_herederos)
-
-        self.boton_agregar_heredero = QPushButton("Agregar Heredero")
-        self.boton_agregar_heredero.clicked.connect(self.agregar_heredero)
-        self.boton_agregar_heredero.setVisible(False)
-        layout_contenido.addWidget(self.boton_agregar_heredero)
-
-        # === Botón Guardar ===
-        self.boton_guardar = QPushButton("Guardar Venta")
-        self.boton_guardar.clicked.connect(self.guardar_venta)
-        layout_contenido.addWidget(self.boton_guardar)
-
-    def verificar_posesion(self, texto):
-        self.seccion_posesion.setVisible(texto == "Posesión Efectiva")
-        self.actualizar_herederos()
-
-    def actualizar_herederos(self):
-        mostrar = self.tipo_venta.currentText() == "Posesión Efectiva"
-        self.tabla_herederos.setVisible(mostrar)
-        self.boton_agregar_heredero.setVisible(mostrar)
-
-        if mostrar:
-            # Cambiar los encabezados si es testada
-            if self.tipo_posesion.currentText() == "Testada":
-                self.tabla_herederos.setColumnCount(5)
-                self.tabla_herederos.setHorizontalHeaderLabels(["Nombre", "RUT", "Tipo Heredero","¿Recibe Mejora?", "% Libre Disposición"])
-            else:
-                self.tabla_herederos.setColumnCount(3)
-                self.tabla_herederos.setHorizontalHeaderLabels(["Nombre", "RUT", "Tipo Herdero"])
-
-    def agregar_heredero(self):
-        fila = self.tabla_herederos.rowCount()
-        self.tabla_herederos.insertRow(fila)
-        for col in range(2):
-            self.tabla_herederos.setItem(fila, col, QTableWidgetItem(""))
-
-        combo = QComboBox()
-        if self.tipo_posesion.currentText() == "Testada":
-                # Columna 3: ¿Recibe Mejora?
-            checkbox_item = QTableWidgetItem()
-            checkbox_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            checkbox_item.setCheckState(Qt.Unchecked)
-            self.tabla_herederos.setItem(fila, 3, checkbox_item)
-
-            # Columna 4: % Libre Disposición
-            self.tabla_herederos.setItem(fila, 4, QTableWidgetItem("0"))
-            combo.addItems(["forzoso", "conyugue", "hijo", "padre"])
-        else:
-            combo.addItems(["conyugue", "hijo", "padre","fisco","otro"])
-
-        self.tabla_herederos.setCellWidget(fila, 2, combo)
-
-    def guardar_venta(self):
-        comprador = {
-            'nombre': self.comprador_nombre.text(),
-            'rut': self.comprador_rut.text(),
-            'direccion': self.comprador_direccion.text(),
-            'telefono': self.comprador_telefono.text(),
-            'correo': self.comprador_correo.text(),
-            'banco':self.comprador_banco.text(),
-            'tipo_cuenta':self.comprador_tipo_cuenta.text(),
-            'nro_cuenta':self.comprador_nro_cuenta.text(),
-            'poder_judicial': self.comprador_poder_judicial.currentText()
-        }
-        
-        vendedor = {
-            'nombre': self.vendedor_nombre.text(),
-            'rut': self.vendedor_rut.text(),
-            'direccion': self.vendedor_direccion.text(),
-            'telefono': self.vendedor_telefono.text(),
-            'correo': self.vendedor_correo.text(),
-            'banco':self.vendedor_banco.text(),
-            'tipo_cuenta':self.vendedor_tipo_cuenta.text(),
-            'nro_cuenta':self.vendedor_nro_cuenta.text(),
-
-        }
-        
-        propiedad = {
-            'codigo': self.propiedad_codigo.text(),
-            'direccion': self.propiedad_direccion.text(),
-            'rol': self.propiedad_rol.text(),
-            'comuna': self.propiedad_comuna.text(),
-            'estudio_titulos': self.estudio_titulos.currentText(),
-            'inscripcion': self.inscripcion.currentText(),
-            'dominio_vigente': self.dominio_vigente.currentText(),
-            'hipoteca': self.hipoteca.currentText(),
-            'gravamen': self.gravamen.currentText(),
-            'certificado_numero': self.certificado_numero.currentText(),
-            'aseo': self.aseo.currentText(),
-            'no_expropiacion': self.no_expropiacion.currentText()
-        }
-
-        # recepcion_definitiva = {
-        #     'codigo_interno': self.propiedad_ofrecida.currentText(),
-        #     'superficie': self.superficie.currentText(),
-        #     'edificada': self.edificada.currentText(),
-        #     'recepcion': self.recepcion.currentText()
-        # }
-        
-        venta = {
-            'fecha_venta': self.fecha_venta.date().toString("yyyy-MM-dd"),
-            'monto_venta': self.monto_venta.text(),
-            'observaciones': self.observaciones.text(),
-            'tipo_venta': self.tipo_venta.currentText(),
-            'estado_venta': self.estado_venta.currentText().lower(),
-            'propiedad_ofrecida': self.propiedad_ofrecida.currentText(),
-            'regularizaciones': self.regularizaciones.currentText(),
-            'limitaciones': self.limitaciones.currentText(),
-            'viabilidad': self.viabilidad.text()
-        }
-
-        data_venta = {
-            'comprador': comprador,
-            'vendedor': vendedor,
-            'propiedad': propiedad,
-            # 'recepcion_definitiva':recepcion_definitiva,
-            'venta': venta
-        }
-        posesion_efectiva = None
-        herederos = []
-        
-        mejoras = []
-        libre_disposicion = {}
-
-        if self.tipo_venta.currentText() == "Posesión Efectiva":
-            posesion_efectiva = {
-                'tipo': self.tipo_posesion.currentText(),
-                'estado_proceso': self.estado_proceso.text(),
-                'canal': self.canal.text(),
-                'observaciones': self.obs_posesion.text()
+        # Estilo para campos obligatorios
+        self.setStyleSheet("""
+            QLabel[obligatorio="true"] {
+                font-weight: bold;
+                color: #FF0000;
             }
+        """)
+        
+        # Tipo de venta
+    def setup_tab_basica(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Tipo de venta
+        self.cmb_tipo_venta = QComboBox()
+        self.cmb_tipo_venta.addItems([
+            "Efectivo", 
+            "Posesion Efectiva", 
+            "Subsidio", 
+            "Credito H.", 
+            "Credito H. + Subsidio"
+        ])
+        # Cambiar el nombre de la señal conectada para mayor claridad
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
+        self.toggle_pos_efectiva_tab(self.cmb_tipo_venta.currentText())
+        
+        # Estado (solo para ventas cerradas)
+        self.cmb_estado = QComboBox()
+        self.cmb_estado.addItems([
+            "Negociandose",
+            "Cerrada verbalmente",
+            "Cerrada en notaria",
+            "Inscrita"
+        ])
+        self.cmb_estado.setVisible(not self.en_proceso)
+        
+        # Fecha
+        self.date_fecha = QDateEdit(QDate.currentDate())
+        self.date_fecha.setCalendarPopup(True)
+        
+        # Monto
+        self.txt_monto = QLineEdit()
+        self.txt_monto.setValidator(QDoubleValidator())
+        
+        # Observaciones
+        self.txt_observaciones = QTextEdit()
+        
+        # Propiedad ofrecida
+        self.cmb_prop_ofrecida = QComboBox()
+        self.cmb_prop_ofrecida.addItems(["Si", "No"])
+        
+        # Regularizaciones
+        self.cmb_regularizaciones = QComboBox()
+        self.cmb_regularizaciones.addItems(["Si", "No"])
+        
+        # Agregar campos al layout
+        layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
+        
+        if not self.en_proceso:
+            layout.addRow(self.crear_label("Estado:", True), self.cmb_estado)
+        
+        layout.addRow(self.crear_label("Fecha:", True), self.date_fecha)
+        layout.addRow(self.crear_label("Monto:", not self.en_proceso), self.txt_monto)
+        layout.addRow(self.crear_label("Observaciones:"), self.txt_observaciones)
+        layout.addRow(self.crear_label("Propiedad ofrecida:", True), self.cmb_prop_ofrecida)
+        layout.addRow(self.crear_label("Regularizaciones:"), self.cmb_regularizaciones)
 
-            for row in range(self.tabla_herederos.rowCount()):
-                heredero = {
-                    'nombre': self.tabla_herederos.item(row, 0).text(),
-                    'rut': self.tabla_herederos.item(row, 1).text(),
-                    'tipo_heredero': self.tabla_herederos.cellWidget(row, 2).currentText() if self.tabla_herederos.cellWidget(row, 2) else "",
-                }
-
-                if self.tipo_posesion.currentText() == "Testada":
-                    mejora_item = self.tabla_herederos.item(row, 3)
-                    libre_item = self.tabla_herederos.item(row, 4)
-
-                    if mejora_item is not None and mejora_item.checkState() == Qt.Checked:
-                        mejoras.append(heredero["rut"])
-
-                    if libre_item is not None:
-                        try:
-                            porcentaje_libre = float(libre_item.text())
-                        except ValueError:
-                            porcentaje_libre = 0
-                        libre_disposicion[heredero["rut"]] = porcentaje_libre
-
-
-
-                herederos.append(heredero)
-
-        if not comprador['nombre'] or not vendedor['nombre'] or not propiedad['codigo']:
-            QMessageBox.warning(self, "Error", "Faltan datos obligatorios.")
-            return
-
+    def toggle_pos_efectiva_tab(self, tipo_venta):
+        if not hasattr(self, 'tab_pos_efectiva_index'):
+            return  # protección por si aún no está
+        mostrar = (not self.en_proceso) and (tipo_venta == "Posesion Efectiva")
+        self.tabs.setTabVisible(self.tab_pos_efectiva_index, mostrar)
+    
+    def setup_tab_comprador(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Campos del comprador
+        self.txt_comp_nombre = QLineEdit()
+        self.txt_comp_rut = QLineEdit()
+        self.txt_comp_direccion = QLineEdit()
+        self.txt_comp_telefono = QLineEdit()
+        self.txt_comp_email = QLineEdit()
+        self.txt_comp_banco = QLineEdit()
+        self.txt_comp_tipo_cuenta = QLineEdit()
+        self.txt_comp_nro_cuenta = QLineEdit()
+        self.cmb_comp_poder = QComboBox()
+        self.cmb_comp_poder.addItems(["Si", "No"])
+        
+        # Agregar campos
+        layout.addRow(self.crear_label("Nombre:", True), self.txt_comp_nombre)
+        layout.addRow(self.crear_label("RUT:", True), self.txt_comp_rut)
+        layout.addRow(self.crear_label("Dirección:"), self.txt_comp_direccion)
+        layout.addRow(self.crear_label("Teléfono:"), self.txt_comp_telefono)
+        layout.addRow(self.crear_label("Email:"), self.txt_comp_email)
+        layout.addRow(self.crear_label("Banco:"), self.txt_comp_banco)
+        layout.addRow(self.crear_label("Tipo de cuenta:"), self.txt_comp_tipo_cuenta)
+        layout.addRow(self.crear_label("Número de cuenta:"), self.txt_comp_nro_cuenta)
+        layout.addRow(self.crear_label("Poder judicial:", True), self.cmb_comp_poder)
+    
+    def setup_tab_vendedor(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Campos del vendedor
+        self.txt_vend_nombre = QLineEdit()
+        self.txt_vend_rut = QLineEdit()
+        self.txt_vend_direccion = QLineEdit()
+        self.txt_vend_telefono = QLineEdit()
+        self.txt_vend_email = QLineEdit()
+        self.txt_vend_banco = QLineEdit()
+        self.txt_vend_tipo_cuenta = QLineEdit()
+        self.txt_vend_nro_cuenta = QLineEdit()
+        self.cmb_vend_poder = QComboBox()
+        self.cmb_vend_poder.addItems(["Si", "No"])
+        
+        # Agregar campos
+        layout.addRow(self.crear_label("Nombre:", True), self.txt_vend_nombre)
+        layout.addRow(self.crear_label("RUT:", True), self.txt_vend_rut)
+        layout.addRow(self.crear_label("Dirección:"), self.txt_vend_direccion)
+        layout.addRow(self.crear_label("Teléfono:"), self.txt_vend_telefono)
+        layout.addRow(self.crear_label("Email:"), self.txt_vend_email)
+        layout.addRow(self.crear_label("Banco:"), self.txt_vend_banco)
+        layout.addRow(self.crear_label("Tipo de cuenta:"), self.txt_vend_tipo_cuenta)
+        layout.addRow(self.crear_label("Número de cuenta:"), self.txt_vend_nro_cuenta)
+        layout.addRow(self.crear_label("Poder judicial:"), self.cmb_vend_poder)
+    
+    def setup_tab_propiedad(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Campos de propiedad
+        self.txt_prop_codigo = QLineEdit()
+        self.txt_prop_direccion = QLineEdit()
+        self.txt_prop_rol = QLineEdit()
+        self.txt_prop_comuna = QLineEdit()
+        
+        # Documentación
+        self.cmb_estudio_titulos = QComboBox()
+        self.cmb_estudio_titulos.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_inscripcion = QComboBox()
+        self.cmb_inscripcion.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_dominio_vigente = QComboBox()
+        self.cmb_dominio_vigente.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_hipoteca = QComboBox()
+        self.cmb_hipoteca.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_gravamen = QComboBox()
+        self.cmb_gravamen.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_certificado_numero = QComboBox()
+        self.cmb_certificado_numero.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_aseo = QComboBox()
+        self.cmb_aseo.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        self.cmb_no_expropiacion = QComboBox()
+        self.cmb_no_expropiacion.addItems(["Si Posee Documento", "No Posee Documento"])
+        
+        # Agregar campos
+        layout.addRow(self.crear_label("Código interno:", True), self.txt_prop_codigo)
+        layout.addRow(self.crear_label("Dirección:", True), self.txt_prop_direccion)
+        layout.addRow(self.crear_label("ROL:", True), self.txt_prop_rol)
+        layout.addRow(self.crear_label("Comuna:", True), self.txt_prop_comuna)
+        
+        # Documentación
+        layout.addRow(QLabel("<b>Documentación:</b>"))
+        layout.addRow(self.crear_label("Estudio de títulos:"), self.cmb_estudio_titulos)
+        layout.addRow(self.crear_label("Inscripción:"), self.cmb_inscripcion)
+        layout.addRow(self.crear_label("Dominio vigente:"), self.cmb_dominio_vigente)
+        layout.addRow(self.crear_label("Hipoteca:"), self.cmb_hipoteca)
+        layout.addRow(self.crear_label("Gravamen:"), self.cmb_gravamen)
+        layout.addRow(self.crear_label("Certificado número:"), self.cmb_certificado_numero)
+        layout.addRow(self.crear_label("Aseo:"), self.cmb_aseo)
+        layout.addRow(self.crear_label("No expropiación:"), self.cmb_no_expropiacion)
+    
+    def setup_tab_pos_efectiva(self, tab):
+        layout = QVBoxLayout(tab)
+        
+        # Tipo de posesión
+        self.cmb_tipo_pos = QComboBox()
+        self.cmb_tipo_pos.addItems(["Testada", "Intestada"])
+        self.cmb_tipo_pos.currentTextChanged.connect(self.actualizar_formulario_herederos)
+        
+        # Canal
+        self.cmb_canal = QComboBox()
+        self.cmb_canal.addItems(["Justicia", "Registro civil"])
+        
+        # Estado proceso
+        self.cmb_estado_proceso = QComboBox()
+        self.cmb_estado_proceso.addItems([
+            "Solicitud",
+            "Dictamen",
+            "Inscrita",
+            "Ingreso",
+            "Resolución"
+        ])
+        
+        # Observaciones
+        self.txt_obs_pos = QTextEdit()
+        
+        # Formulario para tipo de posesión
+        form_layout = QFormLayout()
+        form_layout.addRow("Tipo de posesión:", self.cmb_tipo_pos)
+        form_layout.addRow("Canal:", self.cmb_canal)
+        form_layout.addRow("Estado del proceso:", self.cmb_estado_proceso)
+        form_layout.addRow("Observaciones:", self.txt_obs_pos)
+        
+        layout.addLayout(form_layout)
+        
+        # Herederos
+        self.tabla_herederos = QTableWidget(0, 5)
+        self.tabla_herederos.setHorizontalHeaderLabels([
+            "Nombre", 
+            "RUT", 
+            "Tipo Heredero",
+            "Recibe mejoras",
+            "% Libre disposición"
+        ])
+        
+        # Configurar columnas
+        self.tabla_herederos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabla_herederos.setSelectionBehavior(QAbstractItemView.SelectRows)
+        
+        # Botones para herederos
+        btn_layout = QHBoxLayout()
+        self.btn_agregar_heredero = QPushButton("Agregar Heredero")
+        self.btn_agregar_heredero.clicked.connect(self.agregar_heredero)
+        
+        self.btn_eliminar_heredero = QPushButton("Eliminar Heredero")
+        self.btn_eliminar_heredero.clicked.connect(self.eliminar_heredero)
+        
+        btn_layout.addWidget(self.btn_agregar_heredero)
+        btn_layout.addWidget(self.btn_eliminar_heredero)
+        
+        layout.addWidget(QLabel("<b>Herederos:</b>"))
+        layout.addWidget(self.tabla_herederos)
+        layout.addLayout(btn_layout)
+        
+        # Inicialmente oculto hasta que se seleccione Posesión Efectiva
+        self.tab_pos_efectiva = tab
+        
+    
+    def actualizar_campos_pos_efectiva(self, tipo_venta):
+        # Mostrar pestaña de posesión efectiva solo si es venta cerrada y tipo es Posesión Efectiva
+        mostrar = (not self.en_proceso) and (tipo_venta == "Posesion Efectiva")
+        self.tab_pos_efectiva.setVisible(mostrar)
+        
+        # Actualizar índice si es necesario
+        if mostrar:
+            self.tabs.setCurrentIndex(4)
+    
+    def actualizar_formulario_herederos(self, tipo_pos):
+        # Configurar tabla de herederos según tipo de posesión
+        if tipo_pos == "Testada":
+            self.tabla_herederos.setColumnCount(5)
+            self.tabla_herederos.setHorizontalHeaderLabels([
+                "Nombre", "RUT", "Tipo Heredero", "Recibe mejoras", "% Libre disposición"
+            ])
+        else:
+            self.tabla_herederos.setColumnCount(3)
+            self.tabla_herederos.setHorizontalHeaderLabels([
+                "Nombre", "RUT", "Tipo Heredero"
+            ])
+    
+    def agregar_heredero(self):
+        row = self.tabla_herederos.rowCount()
+        self.tabla_herederos.insertRow(row)
+        
+        # Nombre y RUT
+        self.tabla_herederos.setItem(row, 0, QTableWidgetItem(""))
+        self.tabla_herederos.setItem(row, 1, QTableWidgetItem(""))
+        
+        # Tipo heredero (combobox)
+        cmb_tipo = QComboBox()
+        if self.cmb_tipo_pos.currentText() == "Testada":
+            cmb_tipo.addItems(["Forzoso", "Conyugue", "Hijo", "Padre"])
+        else:
+            cmb_tipo.addItems(["Conyugue", "Hijo", "Padre", "Fisco", "Otro"])
+        
+        self.tabla_herederos.setCellWidget(row, 2, cmb_tipo)
+        
+        # Para posesión testada
+        if self.cmb_tipo_pos.currentText() == "Testada":
+            # Checkbox para mejoras
+            chk_mejoras = QTableWidgetItem()
+            chk_mejoras.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            chk_mejoras.setCheckState(Qt.Unchecked)
+            self.tabla_herederos.setItem(row, 3, chk_mejoras)
+            
+            # Porcentaje libre disposición
+            spin_porcentaje = QDoubleSpinBox()
+            spin_porcentaje.setRange(0, 100)
+            spin_porcentaje.setValue(0)
+            self.tabla_herederos.setCellWidget(row, 4, spin_porcentaje)
+    
+    def eliminar_heredero(self):
+        fila = self.tabla_herederos.currentRow()
+        if fila >= 0:
+            self.tabla_herederos.removeRow(fila)
+    
+    def crear_label(self, texto, obligatorio=False):
+        label = QLabel(texto)
+        if obligatorio:
+            label.setProperty("obligatorio", "true")
+        return label
+    
+    def guardar_venta(self):
+        print("guardar_venta llamada")
         try:
-            print("Mejoras:", mejoras)
-            print("Libre disposición:", libre_disposicion, "Total:",
-            sum(libre_disposicion.values()))
-            venta_id = guardar_venta(data_venta, posesion_efectiva, herederos, mejoras, libre_disposicion)
+            # Validar campos obligatorios
+            if not self.validar_campos_obligatorios():
+                print("Validación falló, no se guarda")
+                return
+            print("Validación correcta, preparando datos")
+            
+            # Preparar datos de la venta
+            data_venta = {
+                'comprador': {
+                    'nombre': self.txt_comp_nombre.text(),
+                    'rut': self.txt_comp_rut.text(),
+                    'direccion': self.txt_comp_direccion.text(),
+                    'telefono': self.txt_comp_telefono.text(),
+                    'correo': self.txt_comp_email.text(),
+                    'banco': self.txt_comp_banco.text(),
+                    'tipo_cuenta': self.txt_comp_tipo_cuenta.text(),
+                    'nro_cuenta': self.txt_comp_nro_cuenta.text(),
+                    'poder_judicial': self.cmb_comp_poder.currentText()
+                },
+                'vendedor': {
+                    'nombre': self.txt_vend_nombre.text(),
+                    'rut': self.txt_vend_rut.text(),
+                    'direccion': self.txt_vend_direccion.text(),
+                    'telefono': self.txt_vend_telefono.text(),
+                    'correo': self.txt_vend_email.text(),
+                    'banco': self.txt_vend_banco.text(),
+                    'tipo_cuenta': self.txt_vend_tipo_cuenta.text(),
+                    'nro_cuenta': self.txt_vend_nro_cuenta.text(),
+                    'poder_judicial': self.cmb_vend_poder.currentText()
+                },
+                'propiedad': {
+                    'codigo': self.txt_prop_codigo.text(),
+                    'direccion': self.txt_prop_direccion.text(),
+                    'rol': self.txt_prop_rol.text(),
+                    'comuna': self.txt_prop_comuna.text(),
+                    'estudio_titulos': self.cmb_estudio_titulos.currentText(),
+                    'inscripcion': self.cmb_inscripcion.currentText(),
+                    'dominio_vigente': self.cmb_dominio_vigente.currentText(),
+                    'hipoteca': self.cmb_hipoteca.currentText(),
+                    'gravamen': self.cmb_gravamen.currentText(),
+                    'certificado_numero': self.cmb_certificado_numero.currentText(),
+                    'aseo': self.cmb_aseo.currentText(),
+                    'no_expropiacion': self.cmb_no_expropiacion.currentText()
+                },
+                'venta': {
+                    'fecha_venta': self.date_fecha.date().toString("yyyy-MM-dd"),
+                    'monto_venta': self.txt_monto.text() if self.txt_monto.text() else None,
+                    'observaciones': self.txt_observaciones.toPlainText(),
+                    'tipo_venta': self.cmb_tipo_venta.currentText(),
+                    'estado_venta': 'en_proceso' if self.en_proceso else self.cmb_estado.currentText().lower(),
+                    'propiedad_ofrecida': self.cmb_prop_ofrecida.currentText(),
+                    'regularizaciones': self.cmb_regularizaciones.currentText(),
+                    'limitaciones': 'No',  # Valor por defecto
+                    'viabilidad': ''  # Valor por defecto
+                }
+            }
+            
+            # Preparar datos de posesión efectiva si es venta cerrada y tipo es Posesión Efectiva
+            posesion_efectiva = None
+            herederos = []
+            mejoras = []
+            libre_disposicion = {}
+            
+            if not self.en_proceso and self.cmb_tipo_venta.currentText() == "Posesion Efectiva":
+                posesion_efectiva = {
+                    'tipo': self.cmb_tipo_pos.currentText().lower(),
+                    'canal': self.cmb_canal.currentText().lower(),
+                    'estado_proceso': self.cmb_estado_proceso.currentText().lower(),
+                    'observaciones': self.txt_obs_pos.toPlainText()
+                }
+                
+                # Procesar herederos
+                for row in range(self.tabla_herederos.rowCount()):
+                    heredero = {
+                        'nombre': self.tabla_herederos.item(row, 0).text(),
+                        'rut': self.tabla_herederos.item(row, 1).text(),
+                        'tipo_heredero': self.tabla_herederos.cellWidget(row, 2).currentText().lower()
+                    }
+                    
+                    # Para posesión testada
+                    if self.cmb_tipo_pos.currentText() == "Testada":
+                        # Mejoras
+                        if self.tabla_herederos.item(row, 3).checkState() == Qt.Checked:
+                            mejoras.append(heredero['rut'])
+                        
+                        # Libre disposición
+                        porcentaje = self.tabla_herederos.cellWidget(row, 4).value()
+                        libre_disposicion[heredero['rut']] = porcentaje
+                    
+                    herederos.append(heredero)
+            
+            # Guardar venta
+            venta_id = guardar_venta(
+                data_venta,
+                posesion_efectiva,
+                herederos,
+                mejoras,
+                libre_disposicion,
+                es_venta_cerrada=not self.en_proceso
+            )
+            
             if venta_id:
-                if self.tipo_venta.currentText() == "Posesión Efectiva":
-                    if self.tipo_posesion.currentText() == "Intestada":
-                        asignar_porcentajes_herencia(herederos)
-                    elif self.tipo_posesion.currentText() == "Testada":
-                        asignar_porcentajes_herencia_testada(herederos, mejoras, libre_disposicion)
-
-                QMessageBox.information(self, "Éxito", "Venta guardada con éxito.")
+                print(f"Venta guardada con ID {venta_id}, mostrando mensaje")
+                QMessageBox.information(
+                    self,
+                    "Éxito",
+                    "La venta se ha guardado correctamente.\n\n"
+                    f"ID de venta: {venta_id}"
+                )
+                print("Mensaje mostrado, emitiendo señal y cerrando ventana")
                 self.venta_guardada.emit()
                 self.close()
+                print("Ventana cerrada")
+            else:
+                print("guardar_venta retornó ID falso o None")
+        
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Ocurrió un error: {str(e)}")
+            print(f"Error en guardar_venta: {e}")
+            QMessageBox.critical(self, "Error", f"No se pudo guardar la venta: {str(e)}")
+    
+    def validar_campos_obligatorios(self):
+        # Validar campos obligatorios básicos
+        campos_obligatorios = [
+            (self.txt_comp_nombre.text(), "Nombre del comprador"),
+            (self.txt_comp_rut.text(), "RUT del comprador"),
+            (self.txt_vend_nombre.text(), "Nombre del vendedor"),
+            (self.txt_vend_rut.text(), "RUT del vendedor"),
+            (self.txt_prop_codigo.text(), "Código de propiedad"),
+            (self.txt_prop_direccion.text(), "Dirección de propiedad"),
+            (self.txt_prop_rol.text(), "ROL de propiedad"),
+            (self.txt_prop_comuna.text(), "Comuna de propiedad")
+        ]
+        
+        for valor, nombre in campos_obligatorios:
+            if not valor.strip():
+                QMessageBox.warning(self, "Campo obligatorio", f"El campo {nombre} es obligatorio")
+                return False
+        
+        # Validar RUTs
+        if not self.validar_rut(self.txt_comp_rut.text()):
+            QMessageBox.warning(self, "RUT inválido", "El RUT del comprador no es válido")
+            return False
+        
+        if not self.validar_rut(self.txt_vend_rut.text()):
+            QMessageBox.warning(self, "RUT inválido", "El RUT del vendedor no es válido")
+            return False
+        
+        # Validar herederos si es posesión efectiva
+        if not self.en_proceso and self.cmb_tipo_venta.currentText() == "Posesion Efectiva":
+            if self.tabla_herederos.rowCount() == 0:
+                QMessageBox.warning(self, "Herederos requeridos", "Debe agregar al menos un heredero para posesión efectiva")
+                return False
+            
+            for row in range(self.tabla_herederos.rowCount()):
+                if not self.tabla_herederos.item(row, 0).text().strip() or not self.tabla_herederos.item(row, 1).text().strip():
+                    QMessageBox.warning(self, "Datos incompletos", "Todos los herederos deben tener nombre y RUT")
+                    return False
+                
+                if not self.validar_rut(self.tabla_herederos.item(row, 1).text()):
+                    QMessageBox.warning(self, "RUT inválido", f"El RUT del heredero en la fila {row+1} no es válido")
+                    return False
+        
+        return True
+    
+    def validar_rut(self, rut):
+        # Implementación básica de validación de RUT chileno
+        rut = rut.replace(".", "").replace("-", "").upper()
+        if not rut[:-1].isdigit():
+            return False
+        
+        cuerpo = rut[:-1]
+        dv = rut[-1]
+        
+        suma = 0
+        multiplicador = 2
+        
+        for c in reversed(cuerpo):
+            suma += int(c) * multiplicador
+            multiplicador += 1
+            if multiplicador > 7:
+                multiplicador = 2
+        
+        resto = suma % 11
+
+        dv_calculado = 11-resto
+
+        if dv_calculado == 11:
+            dv_calculado = "0"
+        elif dv_calculado == 10:
+            dv_calculado = "K"
+        else:
+            dv_calculado = str(dv_calculado)
+        
+        return dv == dv_calculado

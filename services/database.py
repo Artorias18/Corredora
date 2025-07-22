@@ -1,22 +1,80 @@
 from services.supabase_client import supabase
 import os
 from PySide6.QtWidgets import QMessageBox
+import logging
+from typing import Optional, Dict, Any
 
-def obtener_ventas_resumen():
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def obtener_ventas_resumen(filtro_estado=None):
+    """
+    Obtiene un resumen de todas las ventas, opcionalmente filtradas por estado
+    """
     try:
-        response = supabase.rpc("obtener_ventas_resumen").execute()
-        return response.data or []
+        if filtro_estado and filtro_estado != "Todos los estados":
+            # Mapear nombres de filtro a valores de base de datos
+            estado_map = {
+                "En proceso": "en_proceso",
+                "Negociandose": "negociandose",
+                "Cerrada verbalmente": "cerrada verbalmente",
+                "Cerrada en notaria": "cerrada en notaria",
+                "Inscrita": "inscrita"
+            }
+            estado = estado_map.get(filtro_estado, filtro_estado.lower())
+            
+            # Obtener solo las ventas con el estado especificado
+            response = supabase.rpc("obtener_ventas_resumen").execute()
+            filtered_data = [v for v in response.data if v.get('estado_venta', '').lower() == estado.lower()]
+            return filtered_data or []
+        else:
+            # Obtener todas las ventas
+            response = supabase.rpc("obtener_ventas_resumen").execute()
+            return response.data or []
     except Exception as e:
-        print("Error al obtener ventas:", e)
+        logger.error(f"Error al obtener ventas: {str(e)}")
         return []
 
 def obtener_detalle_venta(venta_id):
     try:
         response = supabase.rpc("obtener_detalle_venta", {"venta_id": venta_id}).execute()
-        return response.data[0] if response.data else None
-    except Exception as e:
-        print("Error al obtener detalle:", e)
+
+        data = response.data
+
+        if data and isinstance(data, dict):
+            return data  # el JSON con venta, comprador, vendedor, etc.
+
+        logging.warning(f"No se encontró detalle para venta_id {venta_id}")
         return None
+
+    except Exception as e:
+        logging.error(f"Error crítico al obtener venta {venta_id}: {str(e)}", exc_info=True)
+        return None
+
+
+def actualizar_estado_venta(venta_id, nuevo_estado):
+    try:
+        print(f"Llamando RPC actualizar_estado_venta con venta_id={venta_id}, nuevo_estado={nuevo_estado}")
+        response = supabase.rpc("actualizar_estado_venta", {
+            "venta_id": venta_id,
+            "nuevo_estado": nuevo_estado
+        }).execute()
+        print("Respuesta RPC:", response.data)
+
+        if response.data is None:
+            return False
+        if isinstance(response.data, list):
+            # Para respuesta en lista, devuelve el primer elemento
+            return response.data[0]
+        else:
+            # Para respuesta directa (bool u otro tipo), devuelve tal cual
+            return response.data
+    except Exception as e:
+        print(f"Error al actualizar estado de venta {venta_id}: {str(e)}")
+        return False
+
+
     
 def asignar_porcentajes_herencia(herederos):
     tipo_counts = {"conyugue": 0, "hijo": 0, "padre": 0, "fisco": 0}
@@ -101,6 +159,8 @@ def asignar_porcentajes_herencia_testada(herederos, mejoras=None, libre_disposic
     mejoras: lista de ruts de herederos que recibirán la cuarta de mejoras.
     libre_disposicion: diccionario con rut como clave y porcentaje (del 25%) como valor.
     """
+    total_porcentaje = 0
+
     mejoras = mejoras or []
     libre_disposicion = libre_disposicion or {}
 
@@ -110,7 +170,10 @@ def asignar_porcentajes_herencia_testada(herederos, mejoras=None, libre_disposic
 
     if total_forzosos == 0:
         raise ValueError("Debe haber al menos un heredero forzoso en posesión testada.")
-
+    
+    for h in herederos:
+        h["porcentaje"] = 0
+        
     # Asignar mitad legítima (50%)
     porcentaje_legitima = 50 / total_forzosos
     for heredero in herederos_forzosos:
@@ -121,7 +184,7 @@ def asignar_porcentajes_herencia_testada(herederos, mejoras=None, libre_disposic
         porcentaje_mejora = 25 / len(mejoras)
         for heredero in herederos:
             if heredero["rut"] in mejoras:
-                heredero["porcentaje"] = heredero.get("porcentaje", 0) + porcentaje_mejora
+                heredero["porcentaje"] += porcentaje_mejora
 
     # Asignar cuarta de libre disposición (25%)
     total_libre = sum(libre_disposicion.values())
@@ -137,123 +200,174 @@ def asignar_porcentajes_herencia_testada(herederos, mejoras=None, libre_disposic
     for heredero in herederos:
         heredero["porcentaje"] = round(heredero["porcentaje"], 2)
 
+    if round(total_porcentaje, 2) > 100:
+        raise ValueError(f"La suma total de porcentajes de herencia supera el 100%: {total_porcentaje}%")
 
 
-def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, libre_disposicion=None):
+
+def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, libre_disposicion=None, es_venta_cerrada=False):
+    """
+    Guarda una nueva venta (en proceso o cerrada)
+    """
     try:
-        # Insertar comprador
-        supabase.table("comprador").insert({
+        # Validar datos mínimos
+        if not all([
+            data_venta.get('comprador', {}).get('rut'),
+            data_venta.get('vendedor', {}).get('rut'),
+            data_venta.get('propiedad', {}).get('codigo'),
+            data_venta.get('venta', {}).get('tipo_venta')
+        ]):
+            raise ValueError("Faltan datos obligatorios para la venta")
+
+        # Determinar estado de venta
+        estado_venta = data_venta['venta'].get('estado_venta', 'en_proceso' if not es_venta_cerrada else 'negociandose')
+
+        # 1. Guardar/actualizar comprador
+        comprador_data = {
             'rut': data_venta['comprador']['rut'],
-            'nombre': data_venta['comprador']['nombre'],
-            'direccion': data_venta['comprador']['direccion'],
-            'telefono': data_venta['comprador']['telefono'],
-            'correo_electronico': data_venta['comprador']['correo'],
-            'banco': data_venta['comprador'].get('banco', ''), 
-            'tipo_cuenta': data_venta['comprador']['tipo_cuenta'],
-            'nro_cuenta': data_venta['comprador']['nro_cuenta'],
-            'poder_judicial': data_venta['comprador']['poder_judicial']
-        }).execute()
+            'nombre': data_venta['comprador'].get('nombre', ''),
+            'direccion': data_venta['comprador'].get('direccion', ''),
+            'telefono': data_venta['comprador'].get('telefono', ''),
+            'correo_electronico': data_venta['comprador'].get('correo', ''),
+            'banco': data_venta['comprador'].get('banco', ''),
+            'tipo_cuenta': data_venta['comprador'].get('tipo_cuenta', ''),
+            'nro_cuenta': data_venta['comprador'].get('nro_cuenta', ''),
+            'poder_judicial': data_venta['comprador'].get('poder_judicial', 'No')
+        }
+        supabase.table("comprador").upsert(comprador_data).execute()
 
-        # Insertar vendedor
-        supabase.table("vendedor").insert({
+        # 2. Guardar/actualizar vendedor
+        vendedor_data = {
             'rut': data_venta['vendedor']['rut'],
-            'nombre': data_venta['vendedor']['nombre'],
-            'direccion': data_venta['vendedor']['direccion'],
-            'telefono': data_venta['vendedor']['telefono'],
-            'correo_electronico': data_venta['vendedor']['correo'],
+            'nombre': data_venta['vendedor'].get('nombre', ''),
+            'direccion': data_venta['vendedor'].get('direccion', ''),
+            'telefono': data_venta['vendedor'].get('telefono', ''),
+            'correo_electronico': data_venta['vendedor'].get('correo', ''),
             'banco': data_venta['vendedor'].get('banco', ''),
-            'tipo_cuenta': data_venta['vendedor']['tipo_cuenta'],
-            'nro_cuenta': data_venta['vendedor']['nro_cuenta'] 
-        }).execute()
+            'tipo_cuenta': data_venta['vendedor'].get('tipo_cuenta', ''),
+            'nro_cuenta': data_venta['vendedor'].get('nro_cuenta', ''),
+            'poder_judicial': data_venta['vendedor'].get('poder_judicial', 'No'),
+            'posesion_efectiva': 'Si' if data_venta['venta']['tipo_venta'] == 'Posesion Efectiva' else 'No'
+        }
+        supabase.table("vendedor").upsert(vendedor_data).execute()
 
-        # Insertar propiedad si no existe
-        supabase.table("propiedad").upsert({
+        # 3. Guardar/actualizar propiedad
+        propiedad_data = {
             'codigo_interno': data_venta['propiedad']['codigo'],
-            'direccion': data_venta['propiedad']['direccion'],
-            'rol': data_venta['propiedad']['rol'],
-            'comuna': data_venta['propiedad']['comuna'],
-            'estudio_titulos': data_venta['propiedad']['estudio_titulos'],
-            'inscripcion': data_venta['propiedad']['inscripcion'],
-            'dominio_vigente': data_venta['propiedad']['dominio_vigente'],
-            'hipoteca': data_venta['propiedad']['hipoteca'],
-            'gravamen': data_venta['propiedad']['gravamen'],
-            'certificado_numero': data_venta['propiedad']['certificado_numero'],
-            'aseo': data_venta['propiedad']['aseo'],
-            'no_expropiacion': data_venta['propiedad']['no_expropiacion']
-        }).execute()
+            'direccion': data_venta['propiedad'].get('direccion', ''),
+            'rol': data_venta['propiedad'].get('rol', 0),
+            'comuna': data_venta['propiedad'].get('comuna', ''),
+            'estudio_titulos': data_venta['propiedad'].get('estudio_titulos', 'No Posee Documento'),
+            'inscripcion': data_venta['propiedad'].get('inscripcion', 'No Posee Documento'),
+            'dominio_vigente': data_venta['propiedad'].get('dominio_vigente', 'No Posee Documento'),
+            'hipoteca': data_venta['propiedad'].get('hipoteca', 'No Posee Documento'),
+            'gravamen': data_venta['propiedad'].get('gravamen', 'No Posee Documento'),
+            'certificado_numero': data_venta['propiedad'].get('certificado_numero', 'No Posee Documento'),
+            'aseo': data_venta['propiedad'].get('aseo', 'No Posee Documento'),
+            'no_expropiacion': data_venta['propiedad'].get('no_expropiacion', 'No Posee Documento')
+        }
+        supabase.table("propiedad").upsert(propiedad_data).execute()
 
-        supabase.table("estado_documental").upsert({
+        # 4. Guardar estado documental si hay datos
+        if any([data_venta['venta'].get('limitaciones'), data_venta['venta'].get('viabilidad')]):
+            estado_doc_data = {
+                'codigo_interno': data_venta['propiedad']['codigo'],
+                'limitaciones_dominio': data_venta['venta'].get('limitaciones', 'No'),
+                'viabilidad_vendedor': data_venta['venta'].get('viabilidad', '')
+            }
+            supabase.table("estado_documental").upsert(estado_doc_data).execute()
+
+        # 5. Guardar recepción definitiva si hay datos
+        if any([data_venta['propiedad'].get('superficie'), data_venta['propiedad'].get('edificada'), data_venta['propiedad'].get('recepcion')]):
+            recepcion_data = {
+                'codigo_interno': data_venta['propiedad']['codigo'],
+                'superficie': data_venta['propiedad'].get('superficie', 'No Posee Documento'),
+                'edificada': data_venta['propiedad'].get('edificada', 'No Posee Documento'),
+                'recepcion': data_venta['propiedad'].get('recepcion', 'No Posee Documento')
+            }
+            supabase.table("recepcion_definitiva").upsert(recepcion_data).execute()
+
+        # 6. Crear o actualizar tubo
+        tubo_data = {
+            'tipo_venta': data_venta['venta']['tipo_venta'],
+            'estado_venta': estado_venta,
             'codigo_interno': data_venta['propiedad']['codigo'],
-            'limitaciones_dominio': data_venta['venta']['limitaciones'],
-            'viabilidad_vendedor': data_venta['venta']['viabilidad']
-        }).execute()
+            'propiedad_ofrecida': data_venta['venta'].get('propiedad_ofrecida', 'No'),
+            'en_venta': 'Si',
+            'regularizaciones_ampliaciones': data_venta['venta'].get('regularizaciones', 'No')
+        }
+        
+        tubo_response = supabase.table("tubo").select("id").eq("codigo_interno", data_venta['propiedad']['codigo']).execute()
+        
+        if tubo_response.data:
+            tubo_id = tubo_response.data[0]['id']
+            supabase.table("tubo").update(tubo_data).eq("id", tubo_id).execute()
+        else:
+            tubo_response = supabase.table("tubo").insert(tubo_data).execute()
+            tubo_id = tubo_response.data[0]['id']
 
-        # supabase.table("recepcion_definitiva").upsert({
-        #     'codigo_interno': data_venta['propiedad']['codigo'],
-        #     'superficie': data_venta['venta']['superficie'],
-        #     'edificada': data_venta['venta']['edificada'],
-        #     'recepcion':data_venta['venta']['recepcion']
-        # }).execute()
-
-
-
-
-        # Obtener tubo_id
-        tubo_id = obtener_o_crear_tubo(
-            tipo_venta=data_venta['venta']['tipo_venta'],
-            estado_venta=data_venta['venta']['estado_venta'],
-            codigo_interno=data_venta['propiedad']['codigo'],
-            propiedad_ofrecida=data_venta['venta'].get('propiedad_ofrecida'),  # None si no existe
-            regularizaciones_ampliaciones=data_venta['venta'].get('regularizaciones')  # None si no existe
-        )
-
-        if tubo_id is None:
-            raise ValueError("No se pudo obtener o crear el tubo.")
-
-        # Insertar venta
-        venta_insertada = supabase.table("venta").insert({
+        # 7. Crear venta
+        venta_data = {
             'comprador_rut': data_venta['comprador']['rut'],
             'vendedor_rut': data_venta['vendedor']['rut'],
             'codigo_interno': data_venta['propiedad']['codigo'],
-            'fecha_venta': data_venta['venta']['fecha_venta'],
-            'monto_venta': float(data_venta['venta']['monto_venta']),
-            'observaciones': data_venta['venta']['observaciones'],
-            'tubo_id': tubo_id
-        }).execute()
+            'tubo_id': tubo_id,
+            'fecha_venta': data_venta['venta'].get('fecha_venta'),
+            'monto_venta': float(data_venta['venta'].get('monto_venta', 0)) if data_venta['venta'].get('monto_venta') else None,
+            'observaciones': data_venta['venta'].get('observaciones', ''),
+            'es_venta_proceso': not es_venta_cerrada 
+        }
 
-        if not venta_insertada or venta_insertada.data is None or not venta_insertada.data:
-            raise ValueError(f"La venta no se insertó correctamente. Resultado: {venta_insertada}")
-
-        venta_id = venta_insertada.data[0]['id']
-
-        # Insertar herederos si corresponde
-        if data_posesion is not None and isinstance(data_posesion, dict) and data_venta['venta']['tipo_venta'] == 'Posesión Efectiva':
-            # Asegurar que herederos sea una lista válida
-            herederos = herederos if herederos is not None else []
-            
-            if not isinstance(herederos, list):
-                raise ValueError("'herederos' debe ser una lista o None")
-
-            # Verificar que data_posesion tenga 'tipo'
-            if 'tipo' not in data_posesion:
-                raise ValueError("data_posesion debe tener clave 'tipo'")
-
-            # Procesar herederos solo si hay datos válidos
-            if herederos:  # Solo si la lista no está vacía
-                if data_posesion['tipo'] == 'Intestada':
+        if es_venta_cerrada and data_posesion and data_venta['venta']['tipo_venta'] == 'Posesion Efectiva':
+            if herederos:
+                if not data_posesion or 'tipo' not in data_posesion:
+                    raise ValueError("Para herederos, debe especificar el tipo de posesión (Intestada/Testada)")
+                
+                if data_posesion['tipo'].lower() == 'intestada':
                     asignar_porcentajes_herencia(herederos)
-                elif data_posesion['tipo'] == 'Testada':
-                    asignar_porcentajes_herencia_testada(
-                        herederos, 
-                        mejoras=mejoras or [], 
-                        libre_disposicion=libre_disposicion or {}
-                    )
+                elif data_posesion['tipo'].lower() == 'testada':
+                    asignar_porcentajes_herencia_testada(herederos,
+                                                        mejoras=mejoras if mejoras else [],
+                                                        libre_disposicion=libre_disposicion if libre_disposicion else {})
+                    total_porcentaje = sum([h.get("porcentaje", 0) for h in herederos])
+                    if round(total_porcentaje, 2) > 100:
+                        raise ValueError(f"La suma total de porcentajes de herencia supera el 100%: {total_porcentaje}%")
+                else:
+                    raise ValueError(f"Tipo de posesión no válido: {data_posesion['tipo']}")
 
-                # Insertar en Supabase
+        
+        venta_response = supabase.table("venta").upsert(venta_data).execute()
+        venta_id = venta_response.data[0]['id']
+
+   
+        if es_venta_cerrada and data_posesion and data_venta['venta']['tipo_venta'] == 'Posesion Efectiva':
+            posesion_data = {
+                'codigo_interno': data_venta['propiedad']['codigo'],
+                'tipo_posesion': data_posesion.get('tipo', 'intestada'),
+                'canal': data_posesion.get('canal', 'registro civil'),
+                'estado_proceso': data_posesion.get('estado_proceso', 'solicitud')
+            }
+            supabase.table("posesion_efectiva").upsert(posesion_data).execute()
+            
+            if herederos:
+                herederos_data = []
                 for heredero in herederos:
-                    heredero['venta_id'] = venta_id
-                supabase.table("herederos").insert(herederos).execute()
+                    if not heredero.get('nombre') or not heredero.get('rut'):
+                        raise ValueError("Todos los herederos deben tener nombre y RUT")
+                        
+                    heredero_data = {
+                        'venta_id': venta_id,
+                        'codigo_interno': data_venta['propiedad']['codigo'],
+                        'nombre': heredero.get('nombre', '').strip(),
+                        'rut': heredero.get('rut', '').strip(),
+                        'tipo_heredero': heredero.get('tipo_heredero', 'otro').lower(),
+                        'porcentaje': float(heredero.get('porcentaje', 0))
+                    }
+                    herederos_data.append(heredero_data)
+                
+                supabase.table("herederos").insert(herederos_data).execute()
 
+        # Retornar id de la venta
         return venta_id
 
     except Exception as e:
@@ -262,51 +376,102 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
         traceback.print_exc()
         return None
 
-def obtener_o_crear_tubo(tipo_venta, estado_venta, codigo_interno, propiedad_ofrecida=None, regularizaciones_ampliaciones=None):
+def obtener_o_crear_tubo(data_venta, estado_venta='en_proceso'):
     try:
-        # Normalizar valores para coincidir con la tabla
-        tipo_venta_normalizado = {
-            'Posesión Efectiva': 'Posesion Efectiva',
-            'Efectivo': 'Efectivo',
-            'Subsidio': 'Subsidio',
-            'Credito H.': 'Credito H.',
-            'Credito H. + Subsidio': 'Credito H. + Subsidio'
-        }.get(tipo_venta, tipo_venta)
+        # Validar datos mínimos requeridos
+        required_fields = ['tipo_venta', 'codigo_interno']
+        for field in required_fields:
+            if field not in data_venta['venta'] or not data_venta['venta'][field]:
+                raise ValueError(f"Campo requerido faltante: {field}")
 
-        # Valores por defecto para campos NOT NULL
-        propiedad_ofrecida = 'No' if propiedad_ofrecida is None else ('Si' if propiedad_ofrecida else 'No')
-        en_venta = 'No'  # Valor por defecto según tu estructura
-        regularizaciones = 'No' if regularizaciones_ampliaciones is None else ('Si' if regularizaciones_ampliaciones else 'No')
-
-        # 1. Buscar tubo existente
-        response = supabase.table("tubo").select("id").match({
-            "tipo_venta": tipo_venta_normalizado,
-            "codigo_interno": codigo_interno
-        }).execute()
-
-        if response.data and len(response.data) > 0:
-            return response.data[0]["id"]
-        
-        # 2. Crear nuevo tubo
-        insert_data = {
-            "tipo_venta": tipo_venta_normalizado,
-            "estado_venta": estado_venta,
-            "codigo_interno": codigo_interno,
-            "propiedad_ofrecida": propiedad_ofrecida,
-            "en_venta": en_venta,
-            "regularizaciones_ampliaciones": regularizaciones
+        # Preparar datos del tubo con valores por defecto
+        tubo_data = {
+            'tipo_venta': data_venta['venta']['tipo_venta'],
+            'estado_venta': estado_venta,
+            'codigo_interno': data_venta['propiedad']['codigo'],
+            'propiedad_ofrecida': data_venta['venta'].get('propiedad_ofrecida', 'No'),
+            'en_venta': 'Si',  # Campo requerido que faltaba
+            'regularizaciones_ampliaciones': data_venta['venta'].get('regularizaciones', 'No')
         }
 
-        insert_response = supabase.table("tubo").insert(insert_data).execute()
+        # Buscar tubo existente (con manejo de errores)
+        try:
+            tubo_response = supabase.table("tubo")\
+                                   .select("id")\
+                                   .eq("codigo_interno", data_venta['propiedad']['codigo'])\
+                                   .execute()
+            
+            if tubo_response.data:  # Actualizar existente
+                tubo_id = tubo_response.data[0]['id']
+                update_response = supabase.table("tubo")\
+                                         .update(tubo_data)\
+                                         .eq("id", tubo_id)\
+                                         .execute()
+                if not update_response.data:
+                    raise ValueError("No se pudo actualizar el tubo existente")
+            else:  # Crear nuevo
+                insert_response = supabase.table("tubo")\
+                                         .insert(tubo_data)\
+                                         .execute()
+                if not insert_response.data:
+                    raise ValueError("No se pudo crear el nuevo tubo")
+                tubo_id = insert_response.data[0]['id']
+                
+            return tubo_id
+            
+        except Exception as db_error:
+            logger.error(f"Error en operación de tubo: {str(db_error)}")
+            raise ValueError("Error al acceder a la base de datos")
 
-        if insert_response.data and len(insert_response.data) > 0:
-            return insert_response.data[0]["id"]
-        else:
-            print("Error al crear tubo. Respuesta:", insert_response)
-            raise ValueError("No se pudo crear el tubo. Verifica los datos y restricciones.")
-
+    except ValueError as ve:
+        logger.error(f"Error de validación: {str(ve)}")
+        raise
     except Exception as e:
-        print(f"Error detallado en obtener_o_crear_tubo: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
+        logger.error(f"Error inesperado: {str(e)}")
+        raise ValueError("Error al procesar el tubo")
+    
+
+
+def obtener_ventas_por_estado(estado):
+    """
+    Obtiene ventas filtradas por estado
+    """
+    try:
+        # Mapear nombres de UI a valores de DB
+        estado_map = {
+            "En proceso": "en_proceso",
+            "Negociandose": "negociandose",
+            "Cerrada verbalmente": "cerrada verbalmente",
+            "Cerrada en notaria": "cerrada en notaria",
+            "Inscrita": "inscrita"
+        }
+        
+        estado_db = estado_map.get(estado, estado.lower())
+        
+        # Obtener tubos con el estado solicitado
+        tubos_response = supabase.table("tubo").select("id").eq("estado_venta", estado_db).execute()
+        tubo_ids = [t["id"] for t in tubos_response.data] if tubos_response.data else []
+        
+        if not tubo_ids:
+            return []
+            
+        # Obtener ventas asociadas a esos tubos
+        ventas_response = supabase.table("venta").select("*").in_("tubo_id", tubo_ids).execute()
+        return ventas_response.data or []
+    except Exception as e:
+        logger.error(f"Error al obtener ventas por estado {estado}: {str(e)}")
+        return []
+
+def obtener_ventas_recientes(dias=7):
+    """
+    Obtiene ventas recientes (últimos N días)
+    """
+    try:
+        from datetime import datetime, timedelta
+        fecha_limite = (datetime.now() - timedelta(days=dias)).strftime('%Y-%m-%d')
+        
+        response = supabase.table("venta").select("*").gte("fecha_venta", fecha_limite).execute()
+        return response.data or []
+    except Exception as e:
+        logger.error(f"Error al obtener ventas recientes: {str(e)}")
+        return []
