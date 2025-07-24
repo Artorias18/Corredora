@@ -211,45 +211,51 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
     """
     try:
         # Validar datos mínimos
-        if not all([
-            data_venta.get('comprador', {}).get('rut'),
-            data_venta.get('vendedor', {}).get('rut'),
-            data_venta.get('propiedad', {}).get('codigo'),
-            data_venta.get('venta', {}).get('tipo_venta')
-        ]):
-            raise ValueError("Faltan datos obligatorios para la venta")
+
+        if not data_venta.get('propiedad',{}).get('codigo'):
+            raise ValueError("El código de la propiedad es obligatorio")
+        
+        if es_venta_cerrada:
+            if not data_venta.get('comprador', {}).get('rut'):
+                raise ValueError("El RUT del comprador es obligatorio para ventas cerradas")
+            if not data_venta.get('vendedor', {}).get('rut'):
+                raise ValueError("El RUT del vendedor es obligatorio para ventas cerradas")
+            if not data_venta.get('venta', {}).get('tipo_venta'):
+                raise ValueError("El tipo de venta es obligatorio para ventas cerradas")
 
         # Determinar estado de venta
         estado_venta = data_venta['venta'].get('estado_venta', 'en_proceso' if not es_venta_cerrada else 'negociandose')
 
         # 1. Guardar/actualizar comprador
-        comprador_data = {
-            'rut': data_venta['comprador']['rut'],
-            'nombre': data_venta['comprador'].get('nombre', ''),
-            'direccion': data_venta['comprador'].get('direccion', ''),
-            'telefono': data_venta['comprador'].get('telefono', ''),
-            'correo_electronico': data_venta['comprador'].get('correo', ''),
-            'banco': data_venta['comprador'].get('banco', ''),
-            'tipo_cuenta': data_venta['comprador'].get('tipo_cuenta', ''),
-            'nro_cuenta': data_venta['comprador'].get('nro_cuenta', ''),
-            'poder_judicial': data_venta['comprador'].get('poder_judicial', 'No')
-        }
-        supabase.table("comprador").upsert(comprador_data).execute()
+        if data_venta.get('comprador',{}).get('rut'):
+            comprador_data = {
+                'rut': data_venta['comprador']['rut'],
+                'nombre': data_venta['comprador'].get('nombre', ''),
+                'direccion': data_venta['comprador'].get('direccion', ''),
+                'telefono': data_venta['comprador'].get('telefono', ''),
+                'correo_electronico': data_venta['comprador'].get('correo', ''),
+                'banco': data_venta['comprador'].get('banco', ''),
+                'tipo_cuenta': data_venta['comprador'].get('tipo_cuenta', ''),
+                'nro_cuenta': data_venta['comprador'].get('nro_cuenta', ''),
+                'poder_judicial': data_venta['comprador'].get('poder_judicial', 'No')
+            }
+            supabase.table("comprador").upsert(comprador_data).execute()
 
         # 2. Guardar/actualizar vendedor
-        vendedor_data = {
-            'rut': data_venta['vendedor']['rut'],
-            'nombre': data_venta['vendedor'].get('nombre', ''),
-            'direccion': data_venta['vendedor'].get('direccion', ''),
-            'telefono': data_venta['vendedor'].get('telefono', ''),
-            'correo_electronico': data_venta['vendedor'].get('correo', ''),
-            'banco': data_venta['vendedor'].get('banco', ''),
-            'tipo_cuenta': data_venta['vendedor'].get('tipo_cuenta', ''),
-            'nro_cuenta': data_venta['vendedor'].get('nro_cuenta', ''),
-            'poder_judicial': data_venta['vendedor'].get('poder_judicial', 'No'),
-            'posesion_efectiva': 'Si' if data_venta['venta']['tipo_venta'] == 'Posesion Efectiva' else 'No'
-        }
-        supabase.table("vendedor").upsert(vendedor_data).execute()
+        if data_venta.get('vendedor',{}).get('rut'):
+            vendedor_data = {
+                'rut': data_venta['vendedor']['rut'],
+                'nombre': data_venta['vendedor'].get('nombre', ''),
+                'direccion': data_venta['vendedor'].get('direccion', ''),
+                'telefono': data_venta['vendedor'].get('telefono', ''),
+                'correo_electronico': data_venta['vendedor'].get('correo', ''),
+                'banco': data_venta['vendedor'].get('banco', ''),
+                'tipo_cuenta': data_venta['vendedor'].get('tipo_cuenta', ''),
+                'nro_cuenta': data_venta['vendedor'].get('nro_cuenta', ''),
+                'poder_judicial': data_venta['vendedor'].get('poder_judicial', 'No'),
+                'posesion_efectiva': 'Si' if data_venta['venta']['tipo_venta'] == 'Posesion Efectiva' else 'No'
+            }
+            supabase.table("vendedor").upsert(vendedor_data).execute()
 
         # 3. Guardar/actualizar propiedad
         propiedad_data = {

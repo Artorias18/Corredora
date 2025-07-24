@@ -2,6 +2,10 @@ from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoub
 from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, actualizar_estado_venta, obtener_ventas_por_estado
 from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
+from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, actualizar_estado_venta, obtener_ventas_por_estado
+from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuarlo_actual import UsuarioActual
 from services.supabase_client import supabase
 
@@ -588,6 +592,8 @@ class FormularioVenta(QWidget):
             "Credito H.", 
             "Credito H. + Subsidio"
         ])
+        self.cmb_tipo_venta.setVisible(not self.en_proceso)
+        
         # Cambiar el nombre de la señal conectada para mayor claridad
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
         self.toggle_pos_efectiva_tab(self.cmb_tipo_venta.currentText())
@@ -621,8 +627,9 @@ class FormularioVenta(QWidget):
         self.cmb_regularizaciones = QComboBox()
         self.cmb_regularizaciones.addItems(["Si", "No"])
         
-        # Agregar campos al layout
-        layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
+        # Agregar campos al layout 
+        if not self.en_proceso:
+            layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
         
         if not self.en_proceso:
             layout.addRow(self.crear_label("Estado:", True), self.cmb_estado)
@@ -655,8 +662,9 @@ class FormularioVenta(QWidget):
         self.cmb_comp_poder.addItems(["Si", "No"])
         
         # Agregar campos
-        layout.addRow(self.crear_label("Nombre:", True), self.txt_comp_nombre)
-        layout.addRow(self.crear_label("RUT:", True), self.txt_comp_rut)
+
+        layout.addRow(self.crear_label("Nombre:", not self.en_proceso), self.txt_comp_nombre)
+        layout.addRow(self.crear_label("RUT:", not self.en_proceso), self.txt_comp_rut)
         layout.addRow(self.crear_label("Dirección:"), self.txt_comp_direccion)
         layout.addRow(self.crear_label("Teléfono:"), self.txt_comp_telefono)
         layout.addRow(self.crear_label("Email:"), self.txt_comp_email)
@@ -681,8 +689,10 @@ class FormularioVenta(QWidget):
         self.cmb_vend_poder.addItems(["Si", "No"])
         
         # Agregar campos
-        layout.addRow(self.crear_label("Nombre:", True), self.txt_vend_nombre)
-        layout.addRow(self.crear_label("RUT:", True), self.txt_vend_rut)
+        
+        layout.addRow(self.crear_label("Nombre:", not self.en_proceso), self.txt_vend_nombre)
+        layout.addRow(self.crear_label("RUT:", not self.en_proceso), self.txt_vend_rut)
+
         layout.addRow(self.crear_label("Dirección:"), self.txt_vend_direccion)
         layout.addRow(self.crear_label("Teléfono:"), self.txt_vend_telefono)
         layout.addRow(self.crear_label("Email:"), self.txt_vend_email)
@@ -999,30 +1009,38 @@ class FormularioVenta(QWidget):
     def validar_campos_obligatorios(self):
         # Validar campos obligatorios básicos
         campos_obligatorios = [
-            (self.txt_comp_nombre.text(), "Nombre del comprador"),
-            (self.txt_comp_rut.text(), "RUT del comprador"),
-            (self.txt_vend_nombre.text(), "Nombre del vendedor"),
-            (self.txt_vend_rut.text(), "RUT del vendedor"),
             (self.txt_prop_codigo.text(), "Código de propiedad"),
             (self.txt_prop_direccion.text(), "Dirección de propiedad"),
             (self.txt_prop_rol.text(), "ROL de propiedad"),
             (self.txt_prop_comuna.text(), "Comuna de propiedad")
         ]
         
+        if not self.en_proceso:
+
+            campos_obligatorios += [
+                (self.txt_comp_nombre.text(), "Nombre del comprador"),
+                (self.txt_comp_rut.text(), "RUT del comprador"),
+                (self.txt_vend_nombre.text(), "Nombre del vendedor"),
+                (self.txt_vend_rut.text(), "RUT del vendedor"),
+
+            ]
+
+
         for valor, nombre in campos_obligatorios:
             if not valor.strip():
                 QMessageBox.warning(self, "Campo obligatorio", f"El campo {nombre} es obligatorio")
                 return False
         
         # Validar RUTs
-        if not self.validar_rut(self.txt_comp_rut.text()):
-            QMessageBox.warning(self, "RUT inválido", "El RUT del comprador no es válido")
-            return False
-        
-        if not self.validar_rut(self.txt_vend_rut.text()):
-            QMessageBox.warning(self, "RUT inválido", "El RUT del vendedor no es válido")
-            return False
-        
+        if not self.en_proceso:
+            if not self.validar_rut(self.txt_comp_rut.text()):
+                QMessageBox.warning(self, "RUT inválido", "El RUT del comprador no es válido")
+                return False
+            
+            if not self.validar_rut(self.txt_vend_rut.text()):
+                QMessageBox.warning(self, "RUT inválido", "El RUT del vendedor no es válido")
+                return False
+            
         # Validar herederos si es posesión efectiva
         if not self.en_proceso and self.cmb_tipo_venta.currentText() == "Posesion Efectiva":
             if self.tabla_herederos.rowCount() == 0:
