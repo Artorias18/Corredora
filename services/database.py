@@ -53,26 +53,26 @@ def obtener_detalle_venta(venta_id):
         return None
 
 
-def actualizar_estado_venta(venta_id, nuevo_estado):
-    try:
-        print(f"Llamando RPC actualizar_estado_venta con venta_id={venta_id}, nuevo_estado={nuevo_estado}")
-        response = supabase.rpc("actualizar_estado_venta", {
-            "venta_id": venta_id,
-            "nuevo_estado": nuevo_estado
-        }).execute()
-        print("Respuesta RPC:", response.data)
+# def actualizar_estado_venta(venta_id, nuevo_estado):
+#     try:
+#         print(f"Llamando RPC actualizar_estado_venta con venta_id={venta_id}, nuevo_estado={nuevo_estado}")
+#         response = supabase.rpc("actualizar_estado_venta", {
+#             "venta_id": venta_id,
+#             "nuevo_estado": nuevo_estado
+#         }).execute()
+#         print("Respuesta RPC:", response.data)
 
-        if response.data is None:
-            return False
-        if isinstance(response.data, list):
-            # Para respuesta en lista, devuelve el primer elemento
-            return response.data[0]
-        else:
-            # Para respuesta directa (bool u otro tipo), devuelve tal cual
-            return response.data
-    except Exception as e:
-        print(f"Error al actualizar estado de venta {venta_id}: {str(e)}")
-        return False
+#         if response.data is None:
+#             return False
+#         if isinstance(response.data, list):
+#             # Para respuesta en lista, devuelve el primer elemento
+#             return response.data[0]
+#         else:
+#             # Para respuesta directa (bool u otro tipo), devuelve tal cual
+#             return response.data
+#     except Exception as e:
+#         print(f"Error al actualizar estado de venta {venta_id}: {str(e)}")
+#         return False
 
 
     
@@ -225,9 +225,13 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
         # Determinar estado de venta
         estado_venta = data_venta['venta'].get('estado_venta', 'en_proceso' if not es_venta_cerrada else 'negociandose')
+        
+        # Determinar tipo de venta
+        tipo_venta = data_venta['venta'].get('tipo_venta', '')
+        
 
-        # 1. Guardar/actualizar comprador
-        if data_venta.get('comprador',{}).get('rut'):
+        # 1. Guardar/actualizar comprador si hay datos
+        if any ([data_venta['comprador'].get('rut')]):
             comprador_data = {
                 'rut': data_venta['comprador']['rut'],
                 'nombre': data_venta['comprador'].get('nombre', ''),
@@ -241,8 +245,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             }
             supabase.table("comprador").upsert(comprador_data).execute()
 
-        # 2. Guardar/actualizar vendedor
-        if data_venta.get('vendedor',{}).get('rut'):
+        # 2. Guardar/actualizar vendedor si hay datos
+        if any([data_venta['vendedor'].get('rut')]):
             vendedor_data = {
                 'rut': data_venta['vendedor']['rut'],
                 'nombre': data_venta['vendedor'].get('nombre', ''),
@@ -256,7 +260,7 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'posesion_efectiva': 'Si' if data_venta['venta']['tipo_venta'] == 'Posesion Efectiva' else 'No'
             }
             supabase.table("vendedor").upsert(vendedor_data).execute()
-
+        
         # 3. Guardar/actualizar propiedad
         propiedad_data = {
             'codigo_interno': data_venta['propiedad']['codigo'],
@@ -264,17 +268,23 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             'rol': data_venta['propiedad'].get('rol', 0),
             'comuna': data_venta['propiedad'].get('comuna', ''),
             'estudio_titulos': data_venta['propiedad'].get('estudio_titulos', 'No Posee Documento'),
-            'inscripcion': data_venta['propiedad'].get('inscripcion', 'No Posee Documento'),
-            'dominio_vigente': data_venta['propiedad'].get('dominio_vigente', 'No Posee Documento'),
-            'hipoteca': data_venta['propiedad'].get('hipoteca', 'No Posee Documento'),
-            'gravamen': data_venta['propiedad'].get('gravamen', 'No Posee Documento'),
-            'certificado_numero': data_venta['propiedad'].get('certificado_numero', 'No Posee Documento'),
-            'aseo': data_venta['propiedad'].get('aseo', 'No Posee Documento'),
-            'no_expropiacion': data_venta['propiedad'].get('no_expropiacion', 'No Posee Documento')
+            'dominio_vigente': data_venta['propiedad'].get('dominio_vigente', 'No Posee Documento')
         }
         supabase.table("propiedad").upsert(propiedad_data).execute()
 
+        if any([data_venta['tasador'].get('rut')]):
+            tasador_data = {
+                'rut': data_venta['tasador']['rut'],
+                'nombre': data_venta['tasador'].get('nombre', ''),
+                'telefono': data_venta['tasador'].get('telefono', ''),
+                'codigo_interno': data_venta['propiedad']['codigo'],
+                'correo_electronico': data_venta['tasador'].get('correo', ''),
+            }
+            supabase.table("tasador").upsert(tasador_data).execute()
+
+
         # 4. Guardar estado documental si hay datos
+        
         if any([data_venta['venta'].get('limitaciones'), data_venta['venta'].get('viabilidad')]):
             estado_doc_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
@@ -284,14 +294,19 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             supabase.table("estado_documental").upsert(estado_doc_data).execute()
 
         # 5. Guardar recepción definitiva si hay datos
-        if any([data_venta['propiedad'].get('superficie'), data_venta['propiedad'].get('edificada'), data_venta['propiedad'].get('recepcion')]):
-            recepcion_data = {
-                'codigo_interno': data_venta['propiedad']['codigo'],
-                'superficie': data_venta['propiedad'].get('superficie', 'No Posee Documento'),
-                'edificada': data_venta['propiedad'].get('edificada', 'No Posee Documento'),
-                'recepcion': data_venta['propiedad'].get('recepcion', 'No Posee Documento')
-            }
-            supabase.table("recepcion_definitiva").upsert(recepcion_data).execute()
+        if tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
+            if any([data_venta['recepcion_definitiva'].get('superficie'), data_venta['recepcion_definitiva'].get('edificada'), data_venta['recepcion_definitiva'].get('recepcion')]):
+                recepcion_data = {
+                    'codigo_interno': data_venta['propiedad']['codigo'],
+                    'superficie': data_venta['recepcion_definitiva'].get('superficie', 'No Posee Documento'),
+                    'edificada': data_venta['recepcion_definitiva'].get('edificada', 'No Posee Documento'),
+                    'recepcion': data_venta['recepcion_definitiva'].get('recepcion', 'No Posee Documento')
+                } 
+                
+                response = supabase.table("recepcion_definitiva").upsert(recepcion_data).execute()
+                
+
+
 
         # 6. Crear o actualizar tubo
         tubo_data = {
@@ -314,15 +329,35 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
         # 7. Crear venta
         venta_data = {
-            'comprador_rut': data_venta['comprador']['rut'],
-            'vendedor_rut': data_venta['vendedor']['rut'],
             'codigo_interno': data_venta['propiedad']['codigo'],
             'tubo_id': tubo_id,
             'fecha_venta': data_venta['venta'].get('fecha_venta'),
             'monto_venta': float(data_venta['venta'].get('monto_venta', 0)) if data_venta['venta'].get('monto_venta') else None,
             'observaciones': data_venta['venta'].get('observaciones', ''),
-            'es_venta_proceso': not es_venta_cerrada 
+            'es_venta_proceso': not es_venta_cerrada,
+            'inscripcion': data_venta['venta'].get('inscripcion', 'No Posee Documento'),
+            'hipoteca': data_venta['venta'].get('hipoteca', 'No Posee Documento'),
+            'gravamen': data_venta['venta'].get('gravamen', 'No Posee Documento'),
+            'certificado_numero': data_venta['venta'].get('certificado_numero', 'No Posee Documento'),
+            'aseo': data_venta['venta'].get('aseo', 'No Posee Documento'),
+            'no_expropiacion': data_venta['venta'].get('no_expropiacion', 'No Posee Documento')
         }
+
+        comprador_rut = data_venta['comprador'].get('rut','').strip()
+        if comprador_rut:
+            venta_data['comprador_rut'] = comprador_rut
+        
+        vendedor_rut = data_venta['vendedor'].get('rut','').strip()
+        if vendedor_rut:
+            venta_data['vendedor_rut'] = vendedor_rut
+
+        venta_existente_resp = supabase.table("venta").select("id").eq("tubo_id", tubo_id).execute()
+        if venta_existente_resp.data:
+            venta_id = venta_existente_resp.data[0]['id']
+            venta_data["id"] = venta_id  # 👉 Esto hace que el upsert actualice
+
+
+        
 
         if es_venta_cerrada and data_posesion and data_venta['venta']['tipo_venta'] == 'Posesion Efectiva':
             if herederos:

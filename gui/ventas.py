@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, actualizar_estado_venta, obtener_ventas_por_estado
+from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
 from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, actualizar_estado_venta, obtener_ventas_por_estado
+from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
 from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuarlo_actual import UsuarioActual
@@ -140,6 +140,7 @@ class DetalleVentaWindow(QWidget):
         layout = QVBoxLayout(tab)
         
         propiedad = self.detalle_venta.get('propiedad', {})
+        venta = self.detalle_venta.get('venta', {})
         documentacion = self.detalle_venta.get('documentacion', {})
         
         # Información básica
@@ -163,13 +164,13 @@ class DetalleVentaWindow(QWidget):
         form_doc = QFormLayout()
         campos_doc = [
             ("Estudio de títulos", propiedad.get('estudio_titulos')),
-            ("Inscripción", propiedad.get('inscripcion')),
+            ("Inscripción", venta.get('inscripcion')),
             ("Dominio vigente", propiedad.get('dominio_vigente')),
-            ("Hipoteca", propiedad.get('hipoteca')),
-            ("Gravamen", propiedad.get('gravamen')),
-            ("Certificado número", propiedad.get('certificado_numero')),
-            ("Aseo", propiedad.get('aseo')),
-            ("No expropiación", propiedad.get('no_expropiacion')),
+            ("Hipoteca", venta.get('hipoteca')),
+            ("Gravamen", venta.get('gravamen')),
+            ("Certificado número", venta.get('certificado_numero')),
+            ("Aseo", venta.get('aseo')),
+            ("No expropiación", venta.get('no_expropiacion')),
             ("Superficie", documentacion.get('superficie')),
             ("Edificada", documentacion.get('edificada')),
             ("Recepción", documentacion.get('recepcion'))
@@ -233,7 +234,6 @@ class DashboardVentas(QMainWindow):
         self.setWindowTitle("Gestión de Ventas")
         self.resize(1200, 800)
         self.cargando_tabla = False
-        
         # Widget central
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -299,7 +299,6 @@ class DashboardVentas(QMainWindow):
         self.tabla_ventas.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.tabla_ventas.verticalHeader().setVisible(False)
         self.tabla_ventas.itemDoubleClicked.connect(self.mostrar_detalle_venta)
-        self.tabla_ventas.itemChanged.connect(self.actualizar_estado_venta)
         
         main_layout.addWidget(self.tabla_ventas)
         
@@ -318,10 +317,7 @@ class DashboardVentas(QMainWindow):
         self.btn_exportar = QPushButton("Exportar a Excel")
         self.btn_exportar.clicked.connect(self.exportar_a_excel)
         
-        if self.rol.lower() in ("superusuario", "admin"):
-            self.btn_editar_estado = QPushButton("Cambiar Estado")
-            self.btn_editar_estado.clicked.connect(self.habilitar_edicion_estado)
-            button_layout.addWidget(self.btn_editar_estado)
+ 
         
         button_layout.addWidget(self.btn_agregar_proceso)
         button_layout.addWidget(self.btn_agregar_cerrada)
@@ -336,11 +332,8 @@ class DashboardVentas(QMainWindow):
     def cargar_ventas(self):
         try:
             self.cargando_tabla = True
-            # Desconectar signal para no disparar itemChanged mientras cargas
-            try:
-                self.tabla_ventas.itemChanged.disconnect(self.actualizar_estado_venta)
-            except TypeError:
-                pass  # Si no está conectado, ignora
+            
+
 
             self.tabla_ventas.setRowCount(0)
             estado_filtro = self.filtro_estado.currentText()
@@ -352,29 +345,25 @@ class DashboardVentas(QMainWindow):
 
             if ventas:
                 self.tabla_ventas.setRowCount(len(ventas))
+                self.ventas = ventas or []
+            
 
                 for row, venta in enumerate(ventas):
-                    id_item = QTableWidgetItem(str(venta.get("id", "")))
-                    comprador_item = QTableWidgetItem(venta.get("comprador", ""))
-                    vendedor_item = QTableWidgetItem(venta.get("vendedor", ""))
-                    propiedad_item = QTableWidgetItem(venta.get("propiedad", ""))
-                    fecha_item = QTableWidgetItem(venta.get("fecha_venta", ""))
-                    estado_item = QTableWidgetItem(venta.get("estado_venta", "").capitalize())
-                    estado_item.setFlags(estado_item.flags() | Qt.ItemIsEditable)
-                    tipo_item = QTableWidgetItem(venta.get("tipo_venta", ""))
+                    # Agrega celdas normales
+                    self.tabla_ventas.setItem(row, 0, QTableWidgetItem(str(venta.get("id", ""))))
+                    self.tabla_ventas.setItem(row, 1, QTableWidgetItem(venta.get("comprador", "")))
+                    self.tabla_ventas.setItem(row, 2, QTableWidgetItem(venta.get("vendedor", "")))
+                    self.tabla_ventas.setItem(row, 3, QTableWidgetItem(venta.get("propiedad", "")))
+                    self.tabla_ventas.setItem(row, 4, QTableWidgetItem(str(venta.get("fecha_venta", ""))))
+                    self.tabla_ventas.setItem(row, 5, QTableWidgetItem(venta.get("estado_venta", "")))
+                    self.tabla_ventas.setItem(row, 6, QTableWidgetItem(venta.get("tipo_venta", "")))
 
-                    self.tabla_ventas.setItem(row, 0, id_item)
-                    self.tabla_ventas.setItem(row, 1, comprador_item)
-                    self.tabla_ventas.setItem(row, 2, vendedor_item)
-                    self.tabla_ventas.setItem(row, 3, propiedad_item)
-                    self.tabla_ventas.setItem(row, 4, fecha_item)
-                    self.tabla_ventas.setItem(row, 5, estado_item)
-                    self.tabla_ventas.setItem(row, 6, tipo_item)
+                    
 
                 self.tabla_ventas.resizeColumnsToContents()
+                self.tabla_ventas.setColumnHidden(0, True)
 
-            # Reconectar el signal cuando termines
-            self.tabla_ventas.itemChanged.connect(self.actualizar_estado_venta)
+            
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudieron cargar las ventas: {str(e)}")
@@ -439,54 +428,10 @@ class DashboardVentas(QMainWindow):
         self.formulario_venta.show()
     
     def mostrar_detalle_venta(self, item):
-        if item.column()==5:
-            return
         venta_id = int(self.tabla_ventas.item(item.row(), 0).text())
         self.ventana_detalle = DetalleVentaWindow(venta_id, self.rol)
         self.ventana_detalle.show()
     
-    def habilitar_edicion_estado(self):
-    # Habilitar edición solo en la columna de estado
-        for row in range(self.tabla_ventas.rowCount()):
-            item = self.tabla_ventas.item(row, 5)
-            if item:
-                item.setFlags(item.flags() | Qt.ItemIsEditable)
-        
-        # try:
-        #     self.tabla_ventas.itemChanged.disconnect(self.actualizar_estado_venta)
-        # except TypeError:
-        #     pass  # No estaba conectada, no pasa nada
-
-        # self.tabla_ventas.itemChanged.connect(self.actualizar_estado_venta)
-
-        QMessageBox.information(self, "Edición", "Puede editar el estado directamente en la tabla")
-
-    
-    def actualizar_estado_venta(self, item):
-        if self.cargando_tabla:
-            return  # Ignorar cambios que ocurren mientras se carga la tabla
-
-        if item.column() != 5:
-            return  # Solo procesar cambios en la columna Estado
-
-        venta_id = int(self.tabla_ventas.item(item.row(), 0).text())
-        nuevo_estado = item.text().lower()
-        print(f"Intentando actualizar venta_id={venta_id} con estado={nuevo_estado}")
-
-        try:
-            resultado = actualizar_estado_venta(venta_id, nuevo_estado)
-            print(f"Resultado actualización: {resultado}")
-            if resultado:
-                item.setText(nuevo_estado.capitalize())
-            else:
-                print("No se pudo actualizar el estado en la base de datos.")
-        except Exception as e:
-            print(f"Error en actualizar_estado_venta: {str(e)}")
-            QMessageBox.warning(self, "Error", f"No se pudo actualizar el estado: {str(e)}")
-            self.cargar_ventas()  # Recargar para revertir cambios
-
-
-
     
     def exportar_a_excel(self):
         # Implementar exportación a Excel
@@ -516,10 +461,11 @@ class DashboardVentas(QMainWindow):
 class FormularioVenta(QWidget):
     venta_guardada = Signal()
     
-    def __init__(self, en_proceso=False, parent=None):
+    def __init__(self, en_proceso=False,venta_id=None, parent=None):
         super().__init__(parent)
         self.en_proceso = en_proceso
-        self.setWindowTitle("Nueva Venta en Proceso" if en_proceso else "Nueva Venta Cerrada")
+        self.venta_id = venta_id
+        self.setWindowTitle("Editar Venta" if venta_id else "Nueva Venta en Proceso" if en_proceso else "Nueva Venta Cerrada")
         self.resize(900, 700)
         
         # Layout principal con scroll
@@ -565,6 +511,14 @@ class FormularioVenta(QWidget):
             index = self.tabs.indexOf(tab_pos_efectiva)
             self.tabs.setTabVisible(index, False)
             self.tab_pos_efectiva_index = index  
+
+        if not en_proceso:
+            tab_tasador = QWidget()
+            self.tabs.addTab(tab_tasador, "Tasador")
+            self.setup_tab_tasador(tab_tasador)
+            index = self.tabs.indexOf(tab_tasador)
+            self.tabs.setTabVisible(index, False)
+            self.tab_tasador_index  = index
         
         # Botón de guardar
         btn_guardar = QPushButton("Guardar Venta")
@@ -578,6 +532,9 @@ class FormularioVenta(QWidget):
                 color: #FF0000;
             }
         """)
+
+        if self.venta_id:
+            self.cargar_datos_venta(self.venta_id)
         
         # Tipo de venta
     def setup_tab_basica(self, tab):
@@ -597,6 +554,9 @@ class FormularioVenta(QWidget):
         # Cambiar el nombre de la señal conectada para mayor claridad
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
         self.toggle_pos_efectiva_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_tasador_tab)
+        self.toggle_tasador_tab(self.cmb_tipo_venta.currentText())
         
         # Estado (solo para ventas cerradas)
         self.cmb_estado = QComboBox()
@@ -645,6 +605,13 @@ class FormularioVenta(QWidget):
             return  # protección por si aún no está
         mostrar = (not self.en_proceso) and (tipo_venta == "Posesion Efectiva")
         self.tabs.setTabVisible(self.tab_pos_efectiva_index, mostrar)
+
+    def toggle_tasador_tab(self, tipo_venta):
+        if not hasattr(self, 'tab_tasador_index'):
+            return  # protección por si aún no está
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"])
+        self.tabs.setTabVisible(self.tab_tasador_index, mostrar)
+    
     
     def setup_tab_comprador(self, tab):
         layout = QFormLayout(tab)
@@ -701,6 +668,25 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Número de cuenta:"), self.txt_vend_nro_cuenta)
         layout.addRow(self.crear_label("Poder judicial:"), self.cmb_vend_poder)
     
+
+    def setup_tab_tasador(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Campos del tasador
+        self.txt_tas_nombre = QLineEdit()
+        self.txt_tas_rut = QLineEdit()
+        self.txt_tas_telefono = QLineEdit()
+        self.txt_tas_email = QLineEdit()
+
+        
+        # Agregar campos
+
+        layout.addRow(self.crear_label("Nombre:", not self.en_proceso), self.txt_tas_nombre)
+        layout.addRow(self.crear_label("RUT:", not self.en_proceso), self.txt_tas_rut)
+        layout.addRow(self.crear_label("Teléfono:"), self.txt_tas_telefono)
+        layout.addRow(self.crear_label("Email:"), self.txt_tas_email)
+    
+
     def setup_tab_propiedad(self, tab):
         layout = QFormLayout(tab)
         
@@ -734,7 +720,17 @@ class FormularioVenta(QWidget):
         
         self.cmb_no_expropiacion = QComboBox()
         self.cmb_no_expropiacion.addItems(["Si Posee Documento", "No Posee Documento"])
-        
+
+        self.cmb_superficie = QComboBox()
+        self.cmb_superficie.addItems(["Si Posee Documento", "No Posee Documento"])
+
+        self.cmb_edificada = QComboBox()
+        self.cmb_edificada.addItems(["Si Posee Documento", "No Posee Documento"])
+
+        self.cmb_recepcion = QComboBox()
+        self.cmb_recepcion.addItems(["Si Posee Documento", "No Posee Documento"])
+
+
         # Agregar campos
         layout.addRow(self.crear_label("Código interno:", True), self.txt_prop_codigo)
         layout.addRow(self.crear_label("Dirección:", True), self.txt_prop_direccion)
@@ -751,7 +747,34 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Certificado número:"), self.cmb_certificado_numero)
         layout.addRow(self.crear_label("Aseo:"), self.cmb_aseo)
         layout.addRow(self.crear_label("No expropiación:"), self.cmb_no_expropiacion)
-    
+
+        self.lbl_superficie = self.crear_label("Doc Superficie:")
+        self.lbl_edificada = self.crear_label("Prop Edificada:")
+        self.lbl_recepcion = self.crear_label("Doc Recepcion:")
+
+        layout.addRow(self.lbl_superficie, self.cmb_superficie)
+        layout.addRow(self.lbl_edificada, self.cmb_edificada)
+        layout.addRow(self.lbl_recepcion, self.cmb_recepcion)
+
+        self.lbl_superficie.hide()
+        self.cmb_superficie.hide()
+        self.lbl_edificada.hide()
+        self.cmb_edificada.hide()
+        self.lbl_recepcion.hide()
+        self.cmb_recepcion.hide()
+
+        # Conectar la señal para que muestre/oculte campos extras
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_campos_propiedad)
+
+    def toggle_campos_propiedad(self, texto_seleccionado):
+        mostrar = texto_seleccionado in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]
+        self.lbl_superficie.setVisible(mostrar)
+        self.cmb_superficie.setVisible(mostrar)
+        self.lbl_edificada.setVisible(mostrar)
+        self.cmb_edificada.setVisible(mostrar)
+        self.lbl_recepcion.setVisible(mostrar)
+        self.cmb_recepcion.setVisible(mostrar)
+
     def setup_tab_pos_efectiva(self, tab):
         layout = QVBoxLayout(tab)
         
@@ -872,6 +895,68 @@ class FormularioVenta(QWidget):
             spin_porcentaje.setValue(0)
             self.tabla_herederos.setCellWidget(row, 4, spin_porcentaje)
     
+
+    def cargar_datos_venta(self, venta_id):
+        try:
+            # Obtener la venta
+            venta_resp = supabase.table("venta").select("*").eq("id", venta_id).execute()
+            if not venta_resp.data:
+                QMessageBox.warning(self, "Error", "No se encontraron datos de la venta.")
+                return
+            venta = venta_resp.data[0]
+
+            self.txt_observaciones.setPlainText(venta.get("observaciones", ""))
+            self.txt_monto.setText(str(venta.get("monto_venta", "")))
+            self.date_fecha.setDate(QDate.fromString(venta.get("fecha_venta", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
+
+            # Obtener el tubo
+            tubo_id = venta.get("tubo_id")
+            tubo_resp = supabase.table("tubo").select("*").eq("id", tubo_id).execute()
+            if tubo_resp.data:
+                tubo = tubo_resp.data[0]
+                self.txt_prop_codigo.setText(tubo.get("codigo_interno", ""))
+                self.cmb_tipo_venta.setCurrentText(tubo.get("tipo_venta", ""))
+                self.cmb_estado.setCurrentText(tubo.get("estado_venta", ""))
+                self.cmb_prop_ofrecida.setCurrentText(tubo.get("propiedad_ofrecida", "No"))
+                self.cmb_regularizaciones.setCurrentText(tubo.get("regularizaciones_ampliaciones", "No"))
+
+            # Obtener la propiedad
+            codigo = tubo.get("codigo_interno")
+            propiedad_resp = supabase.table("propiedad").select("*").eq("codigo_interno", codigo).execute()
+            if propiedad_resp.data:
+                prop = propiedad_resp.data[0]
+                self.txt_prop_direccion.setText(prop.get("direccion", ""))
+                self.txt_prop_rol.setText(str(prop.get("rol", "")))
+                self.txt_prop_comuna.setText(prop.get("comuna", ""))
+                self.cmb_estudio_titulos.setCurrentText(prop.get("estudio_titulos", "No Posee Documento"))
+                self.cmb_inscripcion.setCurrentText(prop.get("inscripcion", "No Posee Documento"))
+
+            # Obtener comprador
+            rut_comp = venta.get("comprador_rut")
+            if rut_comp:
+                comp_resp = supabase.table("comprador").select("*").eq("rut", rut_comp).execute()
+                if comp_resp.data:
+                    comp = comp_resp.data[0]
+                    self.txt_comp_nombre.setText(comp.get("nombre", ""))
+                    self.txt_comp_rut.setText(comp.get("rut", ""))
+                    # etc.
+
+            # Obtener vendedor
+            rut_vend = venta.get("vendedor_rut")
+            if rut_vend:
+                vend_resp = supabase.table("vendedor").select("*").eq("rut", rut_vend).execute()
+                if vend_resp.data:
+                    vend = vend_resp.data[0]
+                    self.txt_vend_nombre.setText(vend.get("nombre", ""))
+                    self.txt_vend_rut.setText(vend.get("rut", ""))
+                    # etc.
+
+        except Exception as e:
+            print(f"Error al cargar venta: {str(e)}")
+            QMessageBox.warning(self, "Error", f"No se pudieron cargar los datos de la venta: {str(e)}")
+
+
+
     def eliminar_heredero(self):
         fila = self.tabla_herederos.currentRow()
         if fila >= 0:
@@ -891,7 +976,6 @@ class FormularioVenta(QWidget):
                 print("Validación falló, no se guarda")
                 return
             print("Validación correcta, preparando datos")
-            
             # Preparar datos de la venta
             data_venta = {
                 'comprador': {
@@ -904,6 +988,12 @@ class FormularioVenta(QWidget):
                     'tipo_cuenta': self.txt_comp_tipo_cuenta.text(),
                     'nro_cuenta': self.txt_comp_nro_cuenta.text(),
                     'poder_judicial': self.cmb_comp_poder.currentText()
+                },
+                'tasador':{
+                    'nombre': self.txt_tas_nombre.text(),
+                    'rut': self.txt_tas_rut.text(),
+                    'telefono': self.txt_tas_telefono.text(),
+                    'correo': self.txt_tas_email.text()
                 },
                 'vendedor': {
                     'nombre': self.txt_vend_nombre.text(),
@@ -922,13 +1012,13 @@ class FormularioVenta(QWidget):
                     'rol': self.txt_prop_rol.text(),
                     'comuna': self.txt_prop_comuna.text(),
                     'estudio_titulos': self.cmb_estudio_titulos.currentText(),
-                    'inscripcion': self.cmb_inscripcion.currentText(),
-                    'dominio_vigente': self.cmb_dominio_vigente.currentText(),
-                    'hipoteca': self.cmb_hipoteca.currentText(),
-                    'gravamen': self.cmb_gravamen.currentText(),
-                    'certificado_numero': self.cmb_certificado_numero.currentText(),
-                    'aseo': self.cmb_aseo.currentText(),
-                    'no_expropiacion': self.cmb_no_expropiacion.currentText()
+                    'dominio_vigente': self.cmb_dominio_vigente.currentText()
+                },
+              
+                'recepcion_definitiva':{
+                    'superficie':self.cmb_superficie.currentText(),
+                    'edificada':self.cmb_edificada.currentText(),
+                    'recepcion':self.cmb_recepcion.currentText()
                 },
                 'venta': {
                     'fecha_venta': self.date_fecha.date().toString("yyyy-MM-dd"),
@@ -939,7 +1029,13 @@ class FormularioVenta(QWidget):
                     'propiedad_ofrecida': self.cmb_prop_ofrecida.currentText(),
                     'regularizaciones': self.cmb_regularizaciones.currentText(),
                     'limitaciones': 'No',  # Valor por defecto
-                    'viabilidad': ''  # Valor por defecto
+                    'viabilidad': '', # Valor por defecto
+                    'inscripcion': self.cmb_inscripcion.currentText(),
+                    'hipoteca': self.cmb_hipoteca.currentText(),
+                    'gravamen': self.cmb_gravamen.currentText(),
+                    'certificado_numero': self.cmb_certificado_numero.currentText(),
+                    'aseo': self.cmb_aseo.currentText(),
+                    'no_expropiacion': self.cmb_no_expropiacion.currentText()
                 }
             }
             
