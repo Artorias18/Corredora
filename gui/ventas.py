@@ -513,12 +513,45 @@ class FormularioVenta(QWidget):
             self.tab_pos_efectiva_index = index  
 
         if not en_proceso:
+            tab_prea_credito = QWidget()
+            self.tabs.addTab(tab_prea_credito, 'Pre aprobación crédito')
+            self.setup_tab_prea_credito(tab_prea_credito)
+            index = self.tabs.indexOf(tab_prea_credito)
+            self.tabs.setTabVisible(index, False)
+            self.tab_prea_credito_index = index
+
+        if not en_proceso:
             tab_tasador = QWidget()
             self.tabs.addTab(tab_tasador, "Tasador")
             self.setup_tab_tasador(tab_tasador)
             index = self.tabs.indexOf(tab_tasador)
             self.tabs.setTabVisible(index, False)
             self.tab_tasador_index  = index
+
+        if not en_proceso:
+            tab_confeccion_subsidio = QWidget()
+            self.tabs.addTab(tab_confeccion_subsidio, "Confección Escritura")
+            self.setup_tab_confeccion_subsidio(tab_confeccion_subsidio)
+            index = self.tabs.indexOf(tab_confeccion_subsidio)
+            self.tabs.setTabVisible(index, False)
+            self.tab_confeccion_subsidio_index  = index
+
+        if not en_proceso:
+            tab_confeccion_credito = QWidget()
+            self.tabs.addTab(tab_confeccion_credito, "Confección Escritura")
+            self.setup_tab_confeccion_credito(tab_confeccion_credito)
+            index = self.tabs.indexOf(tab_confeccion_credito)
+            self.tabs.setTabVisible(index, False)
+            self.tab_confeccion_credito_index = index
+            
+        
+        if not en_proceso:
+            tab_cbr = QWidget()
+            self.tabs.addTab(tab_cbr, 'Documentos Conservador')
+            self.setup_tab_cbr(tab_cbr)
+            index = self.tabs.indexOf(tab_cbr)
+            self.tabs.setTabVisible(index, False)
+            self.tab_cbr_index = index
         
         # Botón de guardar
         btn_guardar = QPushButton("Guardar Venta")
@@ -557,6 +590,19 @@ class FormularioVenta(QWidget):
 
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_tasador_tab)
         self.toggle_tasador_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_subsidio_tab)
+        self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_cbr_tab)
+        self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_credito_tab)
+        self.toggle_confeccion_credito_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_credito_tab)
+        self.toggle_prea_credito_tab(self.cmb_tipo_venta.currentText())
+        
         
         # Estado (solo para ventas cerradas)
         self.cmb_estado = QComboBox()
@@ -612,6 +658,31 @@ class FormularioVenta(QWidget):
         mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"])
         self.tabs.setTabVisible(self.tab_tasador_index, mostrar)
     
+    def toggle_confeccion_subsidio_tab(self, tipo_venta):
+        if not hasattr(self, 'tab_confeccion_subsidio_index'):
+            return  # protección por si aún no está
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio"])
+        self.tabs.setTabVisible(self.tab_confeccion_subsidio_index, mostrar)
+
+    def toggle_confeccion_credito_tab(self, tipo_venta):
+        if not hasattr(self, 'tab_confeccion_credito_index'):
+            return
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H."])
+        self.tabs.setTabVisible(self.tab_confeccion_credito_index, mostrar)
+
+    def toggle_cbr_tab(self, tipo_venta):
+        if not hasattr(self,'tab_cbr_index'):
+            return
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"])
+        self.tabs.setTabVisible(self.tab_cbr_index, mostrar)
+
+    def toggle_prea_credito_tab(self, tipo_venta):
+        if not hasattr(self,'tab_prea_credito_index'):
+            return
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H.", "Credito H. + Subsidio"])
+        self.tabs.setTabVisible(self.tab_prea_credito_index, mostrar)
+
+   
     
     def setup_tab_comprador(self, tab):
         layout = QFormLayout(tab)
@@ -671,12 +742,24 @@ class FormularioVenta(QWidget):
 
     def setup_tab_tasador(self, tab):
         layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b>Información Tasador:</b>"))
         
         # Campos del tasador
         self.txt_tas_nombre = QLineEdit()
         self.txt_tas_rut = QLineEdit()
         self.txt_tas_telefono = QLineEdit()
         self.txt_tas_email = QLineEdit()
+
+        # campos documentacion
+        self.cmb_doc_propiedad_tas = QComboBox()
+        self.cmb_doc_propiedad_tas.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_copia_subsidio = QComboBox()
+        self.cmb_copia_subsidio.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_informe_tasacion = QComboBox()
+        self.cmb_informe_tasacion.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_certif_habitabilidad  = QComboBox()
+        self.cmb_certif_habitabilidad .addItems(["Si Posee Documento", "No Posee Documento"])
 
         
         # Agregar campos
@@ -685,7 +768,126 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("RUT:", not self.en_proceso), self.txt_tas_rut)
         layout.addRow(self.crear_label("Teléfono:"), self.txt_tas_telefono)
         layout.addRow(self.crear_label("Email:"), self.txt_tas_email)
+
+        
+
+        layout.addRow(QLabel("<b>Documentos Tasación:</b>"))
+
+        layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_tas)
+        layout.addRow(self.crear_label("Copia Subsidio:"), self.cmb_copia_subsidio)
+        layout.addRow(self.crear_label("Informe de Tasación:"), self.cmb_informe_tasacion)
+        layout.addRow(self.crear_label("Certificado Habitabilidad:"), self.cmb_certif_habitabilidad)
+
+
+    def setup_tab_prea_credito(self, tab):
+        layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b> Preaprobación de credito :</b>"))
+        
+        self.txt_porc_financiamiento = QLineEdit()
+        self.txt_monto_financiamiento = QLineEdit()
+        self.txt_diferencias_prea_credito = QTextEdit()
+
+        layout.addRow(self.crear_label("Porcentaje de Financiamiento:"), self.txt_porc_financiamiento)
+        layout.addRow(self.crear_label("Monto Financiamiento :"), self.txt_monto_financiamiento)
+        layout.addRow(self.crear_label("Diferencias:"), self.txt_diferencias_prea_credito)
+
+        
     
+       
+
+        
+    def setup_tab_confeccion_subsidio(self, tab):
+        layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b>Documentos Confección:</b>"))
+
+        self.cmb_doc_propiedad_confe = QComboBox()
+        self.cmb_doc_propiedad_confe.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_tasacion = QComboBox()
+        self.cmb_doc_tasacion.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_no_parent_comp_vend = QComboBox()
+        self.cmb_doc_dj_no_parent_comp_vend.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_subsidio_original = QComboBox()
+        self.cmb_doc_subsidio_original.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_vend_no_habitual = QComboBox()
+        self.cmb_doc_dj_vend_no_habitual.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_comp_no_parientes_cargos_publicos = QComboBox()
+        self.cmb_doc_dj_comp_no_parientes_cargos_publicos.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.txt_abono_previo= QLineEdit()
+        self.txt_abono_real = QLineEdit()
+
+
+        layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_confe)
+        layout.addRow(self.crear_label("Documento Tasación:"), self.cmb_doc_tasacion)
+        layout.addRow(self.crear_label("Declaración Jurada no parentesco comprador/vendedor:"), self.cmb_doc_dj_no_parent_comp_vend)
+        layout.addRow(self.crear_label("Documento Subsidio Original:"), self.cmb_doc_subsidio_original)
+        layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
+        layout.addRow(self.crear_label("Declaración Jurada No Inhabilidad:"), self.cmb_doc_dj_comp_no_parientes_cargos_publicos)
+
+        layout.addRow(QLabel("<b>Validación de Abonos:</b>"))
+
+        layout.addRow(self.crear_label("Abono previo :"), self.txt_abono_previo)
+        layout.addRow(self.crear_label("Abono real:"), self.txt_abono_real)
+
+        btn_validar = QPushButton("Validar")
+        btn_validar.setFixedSize(80,30)
+        btn_validar.clicked.connect(self.validar_abono)
+        layout.addRow(btn_validar)
+
+
+    def validar_abono(self):
+
+        try:
+            abono_previo = float(self.txt_abono_previo.text() or 0)
+            abono_real = float(self.txt_abono_real.text() or 0)
+        except ValueError:
+            QMessageBox.warning(self, "Error", "Debes ingresar números válidos")
+            return
+
+        if abono_previo == abono_real:
+            QMessageBox.information(
+                self,
+                "Éxito",
+                f"El abono previo coincide con el abono real, el comprador no debe depositar.\n\n"
+                f"Abono previo: {abono_previo}\n"
+                f"Abono real: {abono_real}"
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Aviso",
+                f"Los valores no coinciden, el comprador debe depositar.\n\n"
+                f"Abono previo: {abono_previo}\n"
+                f"Abono real: {abono_real}"
+            )
+
+    
+    def setup_tab_confeccion_credito(self, tab):
+        layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b>Documentos Confección:</b>"))
+
+        self.cmb_doc_propiedad_confe = QComboBox()
+        self.cmb_doc_propiedad_confe.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_tasacion = QComboBox()
+        self.cmb_doc_tasacion.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_vend_no_habitual = QComboBox()
+        self.cmb_doc_dj_vend_no_habitual.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.txt_banco_credito = QLineEdit()
+
+
+        layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_confe)
+        layout.addRow(self.crear_label("Documento Tasación:"), self.cmb_doc_tasacion)
+        layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
+        layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
+    
+    def setup_tab_cbr(self, tab):
+        return
+
+
+
+
 
     def setup_tab_propiedad(self, tab):
         layout = QFormLayout(tab)
@@ -748,14 +950,20 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Aseo:"), self.cmb_aseo)
         layout.addRow(self.crear_label("No expropiación:"), self.cmb_no_expropiacion)
 
+        
+
+        self.titulo_tipo_venta = QLabel("<b>Documentos Subsidio/Credito Hipotecario/Credito Hipotecario + Subsidio:</b>")
+        
         self.lbl_superficie = self.crear_label("Doc Superficie:")
         self.lbl_edificada = self.crear_label("Prop Edificada:")
         self.lbl_recepcion = self.crear_label("Doc Recepcion:")
 
+        layout.addRow(self.titulo_tipo_venta)
         layout.addRow(self.lbl_superficie, self.cmb_superficie)
         layout.addRow(self.lbl_edificada, self.cmb_edificada)
         layout.addRow(self.lbl_recepcion, self.cmb_recepcion)
 
+        self.titulo_tipo_venta.hide()
         self.lbl_superficie.hide()
         self.cmb_superficie.hide()
         self.lbl_edificada.hide()
@@ -768,6 +976,7 @@ class FormularioVenta(QWidget):
 
     def toggle_campos_propiedad(self, texto_seleccionado):
         mostrar = texto_seleccionado in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]
+        self.titulo_tipo_venta.setVisible(mostrar)
         self.lbl_superficie.setVisible(mostrar)
         self.cmb_superficie.setVisible(mostrar)
         self.lbl_edificada.setVisible(mostrar)
@@ -989,12 +1198,34 @@ class FormularioVenta(QWidget):
                     'nro_cuenta': self.txt_comp_nro_cuenta.text(),
                     'poder_judicial': self.cmb_comp_poder.currentText()
                 },
+                'pre_aprobacion_credito':{
+                    'porcentaje_financiamiento': self.txt_porc_financiamiento.text(),
+                    'monto_financiamiento': self.txt_monto_financiamiento.text(),
+                    'diferencias': self.txt_diferencias_prea_credito.toPlainText(),
+                    'banco_credito': self.txt_banco_credito.text()
+                },
                 'tasador':{
                     'nombre': self.txt_tas_nombre.text(),
                     'rut': self.txt_tas_rut.text(),
                     'telefono': self.txt_tas_telefono.text(),
                     'correo': self.txt_tas_email.text()
                 },
+                'documentos_tasacion':{
+                    'doc_propiedad':self.cmb_doc_propiedad_tas.currentText(),
+                    'copia_subsidio':self.cmb_copia_subsidio.currentText(),
+                    'informe_tasacion':self.cmb_informe_tasacion.currentText(),
+                    'certif_habitabilidad':self.cmb_certif_habitabilidad.currentText()
+                },
+
+                'documentos_escritura':{
+                    'doc_propiedad': self.cmb_doc_propiedad_confe.currentText(),
+                    'doc_tasacion': self.cmb_doc_tasacion.currentText(),
+                    'dj_no_parent_comp_vend': self.cmb_doc_dj_no_parent_comp_vend.currentText(),
+                    'subsidio_original': self.cmb_doc_subsidio_original.currentText(),
+                    'dj_vend_no_habitual': self.cmb_doc_dj_vend_no_habitual.currentText(),
+                    'dj_comp_no_parientes_cargos_publicos': self.cmb_doc_dj_comp_no_parientes_cargos_publicos.currentText()
+                },
+
                 'vendedor': {
                     'nombre': self.txt_vend_nombre.text(),
                     'rut': self.txt_vend_rut.text(),
@@ -1035,7 +1266,9 @@ class FormularioVenta(QWidget):
                     'gravamen': self.cmb_gravamen.currentText(),
                     'certificado_numero': self.cmb_certificado_numero.currentText(),
                     'aseo': self.cmb_aseo.currentText(),
-                    'no_expropiacion': self.cmb_no_expropiacion.currentText()
+                    'no_expropiacion': self.cmb_no_expropiacion.currentText(),
+                    'abono_previsto': self.txt_abono_previo.text(),
+                    'abono_real': self.txt_abono_real.text()
                 }
             }
             
@@ -1118,7 +1351,6 @@ class FormularioVenta(QWidget):
                 (self.txt_comp_rut.text(), "RUT del comprador"),
                 (self.txt_vend_nombre.text(), "Nombre del vendedor"),
                 (self.txt_vend_rut.text(), "RUT del vendedor"),
-
             ]
 
 

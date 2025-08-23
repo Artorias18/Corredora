@@ -1,6 +1,0 @@
-# supabase_client.py
-from supabase import create_client, Client
-url= "https://bywnnnutcdjteulshedo.supabase.co"
-
-public_key= "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5d25ubnV0Y2RqdGV1bHNoZWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxNjAxMTcsImV4cCI6MjA2NDczNjExN30.cRnSJZZGElFJIP052fm3WtDmvRtwU-mZZJMhR0o6utk"
-supabase: Client = create_client(url, public_key)
