@@ -595,7 +595,7 @@ class FormularioVenta(QWidget):
         self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
 
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_cbr_tab)
-        self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
+        self.toggle_cbr_tab(self.cmb_tipo_venta.currentText())
 
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_credito_tab)
         self.toggle_confeccion_credito_tab(self.cmb_tipo_venta.currentText())
