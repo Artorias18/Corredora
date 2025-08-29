@@ -787,12 +787,28 @@ class FormularioVenta(QWidget):
         self.txt_porc_financiamiento = QLineEdit()
         self.txt_monto_financiamiento = QLineEdit()
         self.txt_diferencias_prea_credito = QTextEdit()
+        self.checkbox_dif = QCheckBox("¿Existen diferencias?")
+        self.checkbox_dif.setChecked(False)
 
         layout.addRow(self.crear_label("Porcentaje de Financiamiento:"), self.txt_porc_financiamiento)
         layout.addRow(self.crear_label("Monto Financiamiento :"), self.txt_monto_financiamiento)
-        layout.addRow(self.crear_label("Diferencias:"), self.txt_diferencias_prea_credito)
+        layout.addWidget(self.checkbox_dif)
+        self.lbl_diferencias = self.crear_label("Diferencias:")
+        layout.addRow(self.lbl_diferencias, self.txt_diferencias_prea_credito)
+        self.lbl_diferencias.hide()
+        self.txt_diferencias_prea_credito.hide()
+        self.checkbox_dif.stateChanged.connect(self.verificar_dif)
 
         
+        
+    
+    def verificar_dif(self):
+        mostrar = self.checkbox_dif.isChecked()
+        self.lbl_diferencias.setVisible(mostrar)
+        self.txt_diferencias_prea_credito.setVisible(mostrar)
+
+    
+    
     
        
 

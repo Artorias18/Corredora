@@ -4,4 +4,4 @@ venv/
 env/
 Lib/
 Scripts/
-services/
+services/supabase_client.py
