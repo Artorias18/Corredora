@@ -5,3 +5,4 @@ env/
 Lib/
 Scripts/
 services/supabase_client.py
+__pycache__/
