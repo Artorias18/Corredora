@@ -543,15 +543,16 @@ class FormularioVenta(QWidget):
             index = self.tabs.indexOf(tab_confeccion_credito)
             self.tabs.setTabVisible(index, False)
             self.tab_confeccion_credito_index = index
-            
-        
+
         if not en_proceso:
-            tab_cbr = QWidget()
-            self.tabs.addTab(tab_cbr, 'Documentos Conservador')
-            self.setup_tab_cbr(tab_cbr)
-            index = self.tabs.indexOf(tab_cbr)
+            tab_docs_pas = QWidget()
+            self.tabs.addTab(tab_docs_pas, "Documentos PAS")
+            self.setup_tab_docs_pas(tab_docs_pas)
+            index = self.tabs.indexOf(tab_docs_pas)
             self.tabs.setTabVisible(index, False)
-            self.tab_cbr_index = index
+            self.tab_docs_pas_index = index
+            
+
         
         # Botón de guardar
         btn_guardar = QPushButton("Guardar Venta")
@@ -594,14 +595,14 @@ class FormularioVenta(QWidget):
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_subsidio_tab)
         self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
 
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_cbr_tab)
-        self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
-
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_credito_tab)
         self.toggle_confeccion_credito_tab(self.cmb_tipo_venta.currentText())
 
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_credito_tab)
         self.toggle_prea_credito_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_docs_pas)
+        self.toggle_docs_pas(self.cmb_tipo_venta.currentText())
         
         
         # Estado (solo para ventas cerradas)
@@ -670,17 +671,18 @@ class FormularioVenta(QWidget):
         mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H."])
         self.tabs.setTabVisible(self.tab_confeccion_credito_index, mostrar)
 
-    def toggle_cbr_tab(self, tipo_venta):
-        if not hasattr(self,'tab_cbr_index'):
-            return
-        mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"])
-        self.tabs.setTabVisible(self.tab_cbr_index, mostrar)
 
     def toggle_prea_credito_tab(self, tipo_venta):
         if not hasattr(self,'tab_prea_credito_index'):
             return
         mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H.", "Credito H. + Subsidio"])
         self.tabs.setTabVisible(self.tab_prea_credito_index, mostrar)
+
+    def toggle_docs_pas(self, tipo_venta):
+        if not hasattr(self,'tab_docs_pas_index'):
+            return
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio", "Credito H. + Subsidio"])
+        self.tabs.setTabVisible(self.tab_docs_pas_index, mostrar)
 
    
     
@@ -898,11 +900,39 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
         layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
     
-    def setup_tab_cbr(self, tab):
-        return
+    def setup_tab_docs_pas(self, tab):
+        layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b>Documentos PAS:</b>"))
+
+        self.cmb_supe_platas = QComboBox()
+        self.cmb_supe_platas.addItems(["Plata en custodia", "Inscripción en CBR", "Plata liberada"])
+
+        self.fecha_ingreso_documentos = QDateEdit(QDate.currentDate())
+        self.fecha_ingreso_documentos.setCalendarPopup(True)
+
+        self.checkbox_reparos = QCheckBox("¿Existen reparos?")
+        self.checkbox_reparos.setChecked(False)
+
+        self.txt_reparos = QTextEdit()
+
+        layout.addRow(self.crear_label("Fecha de ingreso documentos:"), self.fecha_ingreso_documentos)
+
+        layout.addRow(self.crear_label("Estado de Custodia y Pago:"), self.cmb_supe_platas)
+
+        layout.addWidget(self.checkbox_reparos)
+        self.lbl_reparos = self.crear_label("Reparos:")
+        layout.addRow(self.lbl_reparos, self.txt_reparos)
+        self.lbl_reparos.hide()
+        self.txt_reparos.hide()
+        self.checkbox_reparos.stateChanged.connect(self.verificar_reparos)
 
 
 
+    def verificar_reparos(self):
+        mostrar = self.checkbox_reparos.isChecked()
+        self.lbl_reparos.setVisible(mostrar)
+        self.txt_reparos.setVisible(mostrar)
 
 
     def setup_tab_propiedad(self, tab):
@@ -1241,7 +1271,6 @@ class FormularioVenta(QWidget):
                     'dj_vend_no_habitual': self.cmb_doc_dj_vend_no_habitual.currentText(),
                     'dj_comp_no_parientes_cargos_publicos': self.cmb_doc_dj_comp_no_parientes_cargos_publicos.currentText()
                 },
-
                 'vendedor': {
                     'nombre': self.txt_vend_nombre.text(),
                     'rut': self.txt_vend_rut.text(),
@@ -1267,6 +1296,12 @@ class FormularioVenta(QWidget):
                     'edificada':self.cmb_edificada.currentText(),
                     'recepcion':self.cmb_recepcion.currentText()
                 },
+                'documentos_pas':{
+                    'fecha_ingreso_docs' : self.fecha_ingreso_documentos.date().toString("yyyy-MM-dd"),
+                    'supe_platas' : self.cmb_supe_platas.currentText(),
+                    'reparos' : self.txt_reparos.toPlainText()
+                },
+
                 'venta': {
                     'fecha_venta': self.date_fecha.date().toString("yyyy-MM-dd"),
                     'monto_venta': self.txt_monto.text() if self.txt_monto.text() else None,

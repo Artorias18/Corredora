@@ -88,6 +88,15 @@ def asignar_porcentajes_herencia(herederos):
     padres = tipo_counts["padre"]
     fisco = tipo_counts["fisco"]
 
+    def ajustar_redondeo(herederos):
+        total = sum(h["porcentaje"] for h in herederos if "porcentaje" in h)
+        diff = round(100 - total, 2)
+        if abs(diff) > 0.01:
+            for h in reversed(herederos):
+                if "porcentaje" in h:
+                    h["porcentaje"] = round(h["porcentaje"] + diff, 2)
+                    break
+
     if hijos > 0 and conyugue > 0:
         # Escenario: conyugue + hijos
         if 2 <= hijos <= 7:
@@ -138,6 +147,16 @@ def asignar_porcentajes_herencia(herederos):
             elif heredero["tipo_heredero"] == "padre":
                 heredero["porcentaje"] = round(porcentaje_padre, 2)
 
+    elif hijos > 0 and padres > 0 and conyugue == 0:
+        # Hijos + padres
+        porcentaje_hijo = 50 / hijos
+        porcentaje_padre = 50 / padres
+        for heredero in herederos:
+            if heredero["tipo_heredero"] == "hijo":
+                heredero["porcentaje"] = round(porcentaje_hijo, 2)
+            elif heredero["tipo_heredero"] == "padre":
+                heredero["porcentaje"] = round(porcentaje_padre, 2)
+
     elif conyugue > 0 and hijos == 0 and padres == 0:
         # Solo conyugue
         for heredero in herederos:
@@ -149,6 +168,10 @@ def asignar_porcentajes_herencia(herederos):
         for heredero in herederos:
             if heredero["tipo_heredero"] == "fisco":
                 heredero["porcentaje"] = 100.0
+
+    ajustar_redondeo(herederos)
+
+    return herederos
 
 
 
@@ -302,6 +325,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
             supabase.table("pre_aprobacion_credito").upsert(pre_aprobacion_data).execute()
 
+        
+
             
 
 
@@ -405,6 +430,17 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
             if abono_real:
                 venta_data['abono_real'] = abono_real
+
+            documentos_pas_data = {
+                'codigo_interno': data_venta['propiedad']['codigo'],
+                'fecha_ingreso_docs': data_venta['documentos_pas']['fecha_ingreso_docs'],
+                'supe_platas': data_venta['documentos_pas'].get('supe_platas'),
+                'reparos' : data_venta['documentos_pas'].get('reparos','')
+            }
+            
+            supabase.table("documentos_pas").upsert(documentos_pas_data).execute()
+
+
 
 
 
