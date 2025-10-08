@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
 from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
-from PySide6.QtCore import Qt, QDate, Signal
+from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
 from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuarlo_actual import UsuarioActual
 from services.supabase_client import supabase
+
 
 
 
@@ -544,6 +545,16 @@ class FormularioVenta(QWidget):
             self.tabs.setTabVisible(index, False)
             self.tab_confeccion_credito_index = index
 
+
+        if not en_proceso:
+            tab_confeccion_subsidio_credito = QWidget()
+            self.tabs.addTab(tab_confeccion_subsidio_credito, "Confección Escritura")
+            self.setup_tab_confeccion_subsidio_credito(tab_confeccion_subsidio_credito)
+            index = self.tabs.indexOf(tab_confeccion_subsidio_credito)
+            self.tabs.setTabVisible(index, False)
+            self.tab_confeccion_subsidio_credito_index = index
+            
+
         if not en_proceso:
             tab_docs_pas = QWidget()
             self.tabs.addTab(tab_docs_pas, "Documentos PAS")
@@ -551,7 +562,8 @@ class FormularioVenta(QWidget):
             index = self.tabs.indexOf(tab_docs_pas)
             self.tabs.setTabVisible(index, False)
             self.tab_docs_pas_index = index
-            
+
+       
 
         
         # Botón de guardar
@@ -597,6 +609,9 @@ class FormularioVenta(QWidget):
 
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_credito_tab)
         self.toggle_confeccion_credito_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_subsidio_credito_tab)
+        self.toggle_confeccion_subsidio_credito_tab(self.cmb_tipo_venta.currentText())
 
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_credito_tab)
         self.toggle_prea_credito_tab(self.cmb_tipo_venta.currentText())
@@ -671,6 +686,11 @@ class FormularioVenta(QWidget):
         mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H."])
         self.tabs.setTabVisible(self.tab_confeccion_credito_index, mostrar)
 
+    def toggle_confeccion_subsidio_credito_tab(self, tipo_venta):
+        if not hasattr(self, 'tab_confeccion_subsidio_credito_index'):
+            return  # protección por si aún no está
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H. + Subsidio"])
+        self.tabs.setTabVisible(self.tab_confeccion_subsidio_credito_index, mostrar)
 
     def toggle_prea_credito_tab(self, tipo_venta):
         if not hasattr(self,'tab_prea_credito_index'):
@@ -815,9 +835,12 @@ class FormularioVenta(QWidget):
        
 
         
+ 
+
     def setup_tab_confeccion_subsidio(self, tab):
         layout = QFormLayout(tab)
 
+        # --- Documentos Confección ---
         layout.addRow(QLabel("<b>Documentos Confección:</b>"))
 
         self.cmb_doc_propiedad_confe = QComboBox()
@@ -832,9 +855,6 @@ class FormularioVenta(QWidget):
         self.cmb_doc_dj_vend_no_habitual.addItems(["Si Posee Documento", "No Posee Documento"])
         self.cmb_doc_dj_comp_no_parientes_cargos_publicos = QComboBox()
         self.cmb_doc_dj_comp_no_parientes_cargos_publicos.addItems(["Si Posee Documento", "No Posee Documento"])
-        self.txt_abono_previo= QLineEdit()
-        self.txt_abono_real = QLineEdit()
-
 
         layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_confe)
         layout.addRow(self.crear_label("Documento Tasación:"), self.cmb_doc_tasacion)
@@ -843,44 +863,67 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
         layout.addRow(self.crear_label("Declaración Jurada No Inhabilidad:"), self.cmb_doc_dj_comp_no_parientes_cargos_publicos)
 
+        # --- Validación de Abonos ---
+        
         layout.addRow(QLabel("<b>Validación de Abonos:</b>"))
 
-        layout.addRow(self.crear_label("Abono previo :"), self.txt_abono_previo)
+        # Crear campos de texto
+        self.txt_abono_previo = QLineEdit()
+        self.txt_abono_real = QLineEdit()
+
+        # Configurar placeholders
+        self.txt_abono_previo.setPlaceholderText("Ej: 4.0")
+        self.txt_abono_real.setPlaceholderText("Ej: 2.0")
+        
+
+        layout.addRow(self.crear_label("Abono previo:"), self.txt_abono_previo)
         layout.addRow(self.crear_label("Abono real:"), self.txt_abono_real)
 
-        btn_validar = QPushButton("Validar")
-        btn_validar.setFixedSize(80,30)
-        btn_validar.clicked.connect(self.validar_abono)
-        layout.addRow(btn_validar)
+        self.lbl_validacion_abono = QLabel("Ingrese ambos abonos para validar")
+        self.lbl_validacion_abono.setMinimumHeight(30)
+        self.lbl_validacion_abono.setAlignment(Qt.AlignLeft)
+        layout.addRow(QLabel("Resultado validación:"), self.lbl_validacion_abono)
 
+        self.abono_previo_val = None
+        self.abono_real_val = None
+
+        # Conectar señales
+        self.txt_abono_previo.textChanged.connect(self.on_abono_previo_cambiado)
+        self.txt_abono_real.textChanged.connect(self.on_abono_real_cambiado)
+
+    def on_abono_previo_cambiado(self, texto):
+        try:
+            self.abono_previo_val = float(texto.replace(",", "."))
+        except ValueError:
+            self.abono_previo_val = None  # si no es número válido
+        self.validar_abono()
+
+    def on_abono_real_cambiado(self, texto):
+        try:
+            self.abono_real_val = float(texto.replace(",", "."))
+        except ValueError:
+            self.abono_real_val = None
+        self.validar_abono()
 
     def validar_abono(self):
+            if self.abono_previo_val is None or self.abono_real_val is None:
+                self.lbl_validacion_abono.setText("Debe ingresar valores validos en los abonos para hacer la validación")
+                self.lbl_validacion_abono.setStyleSheet("color:red")
+                return
+            
+            if self.abono_previo_val is not None and self.abono_real_val is not None:
+                dif_a_pagar = self.abono_real_val - self.abono_previo_val
 
-        try:
-            abono_previo = float(self.txt_abono_previo.text() or 0)
-            abono_real = float(self.txt_abono_real.text() or 0)
-        except ValueError:
-            QMessageBox.warning(self, "Error", "Debes ingresar números válidos")
-            return
+            if self.abono_previo_val >= self.abono_real_val:
+                self.lbl_validacion_abono.setText(f"El abono previo cubre o supera el abono real: {dif_a_pagar}")
+                self.lbl_validacion_abono.setStyleSheet("color: green;")
+            else:
+                self.lbl_validacion_abono.setText(f"El abono real es mayor al abono previo, el comprador debe depositar: {dif_a_pagar}")
+                self.lbl_validacion_abono.setStyleSheet("color: orange;")
 
-        if abono_previo == abono_real:
-            QMessageBox.information(
-                self,
-                "Éxito",
-                f"El abono previo coincide con el abono real, el comprador no debe depositar.\n\n"
-                f"Abono previo: {abono_previo}\n"
-                f"Abono real: {abono_real}"
-            )
-        else:
-            QMessageBox.warning(
-                self,
-                "Aviso",
-                f"Los valores no coinciden, el comprador debe depositar.\n\n"
-                f"Abono previo: {abono_previo}\n"
-                f"Abono real: {abono_real}"
-            )
+        
 
-    
+                
     def setup_tab_confeccion_credito(self, tab):
         layout = QFormLayout(tab)
 
@@ -899,6 +942,59 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Documento Tasación:"), self.cmb_doc_tasacion)
         layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
         layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
+
+    # **************************************************************************************************************************
+    def setup_tab_confeccion_subsidio_credito(self, tab):
+        layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b>Documentos Confección:</b>"))
+
+        self.cmb_doc_propiedad_confe = QComboBox()
+        self.cmb_doc_propiedad_confe.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_tasacion = QComboBox()
+        self.cmb_doc_tasacion.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_no_parent_comp_vend = QComboBox()
+        self.cmb_doc_dj_no_parent_comp_vend.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_subsidio_original = QComboBox()
+        self.cmb_doc_subsidio_original.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_vend_no_habitual = QComboBox()
+        self.cmb_doc_dj_vend_no_habitual.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.cmb_doc_dj_comp_no_parientes_cargos_publicos = QComboBox()
+        self.cmb_doc_dj_comp_no_parientes_cargos_publicos.addItems(["Si Posee Documento", "No Posee Documento"])
+        self.txt_abono_previo = QLineEdit()
+        self.txt_abono_real = QLineEdit()
+        self.txt_banco_credito = QLineEdit()
+
+
+        layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_confe)
+        layout.addRow(self.crear_label("Documento Tasación:"), self.cmb_doc_tasacion)
+        layout.addRow(self.crear_label("Declaración Jurada no parentesco comprador/vendedor:"), self.cmb_doc_dj_no_parent_comp_vend)
+        layout.addRow(self.crear_label("Documento Subsidio Original:"), self.cmb_doc_subsidio_original)
+        layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
+        layout.addRow(self.crear_label("Declaración Jurada No Inhabilidad:"), self.cmb_doc_dj_comp_no_parientes_cargos_publicos)
+        layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
+
+        layout.addRow(QLabel("<b>Validación de Abonos:</b>"))
+
+        self.txt_abono_previo.setPlaceholderText("Ej: 4.0")
+        self.txt_abono_real.setPlaceholderText("Ej: 2.0")
+        
+
+        layout.addRow(self.crear_label("Abono previo:"), self.txt_abono_previo)
+        layout.addRow(self.crear_label("Abono real:"), self.txt_abono_real)
+
+        self.lbl_validacion_abono = QLabel("Ingrese ambos abonos para validar")
+        self.lbl_validacion_abono.setMinimumHeight(30)
+        self.lbl_validacion_abono.setAlignment(Qt.AlignLeft)
+        layout.addRow(QLabel("Resultado validación:"), self.lbl_validacion_abono)
+
+        self.abono_previo_val = None
+        self.abono_real_val = None
+
+        # Conectar señales
+        self.txt_abono_previo.textChanged.connect(self.on_abono_previo_cambiado)
+        self.txt_abono_real.textChanged.connect(self.on_abono_real_cambiado)
+    # **************************************************************************************************************************
     
     def setup_tab_docs_pas(self, tab):
         layout = QFormLayout(tab)
