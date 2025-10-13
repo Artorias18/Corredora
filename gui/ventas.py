@@ -513,6 +513,15 @@ class FormularioVenta(QWidget):
             self.tabs.setTabVisible(index, False)
             self.tab_pos_efectiva_index = index  
 
+
+        if not en_proceso:
+            tab_tasador = QWidget()
+            self.tabs.addTab(tab_tasador, "Tasador")
+            self.setup_tab_tasador(tab_tasador)
+            index = self.tabs.indexOf(tab_tasador)
+            self.tabs.setTabVisible(index, False)
+            self.tab_tasador_index  = index
+
         if not en_proceso:
             tab_prea_credito = QWidget()
             self.tabs.addTab(tab_prea_credito, 'Pre aprobación crédito')
@@ -522,12 +531,12 @@ class FormularioVenta(QWidget):
             self.tab_prea_credito_index = index
 
         if not en_proceso:
-            tab_tasador = QWidget()
-            self.tabs.addTab(tab_tasador, "Tasador")
-            self.setup_tab_tasador(tab_tasador)
-            index = self.tabs.indexOf(tab_tasador)
+            tab_prea_subsidio = QWidget()
+            self.tabs.addTab(tab_prea_subsidio, 'Pre aprobación subsidio')
+            self.setup_tab_prea_subsidio(tab_prea_subsidio)
+            index = self.tabs.indexOf(tab_prea_subsidio)
             self.tabs.setTabVisible(index, False)
-            self.tab_tasador_index  = index
+            self.tab_prea_subsidio_index = index
 
         if not en_proceso:
             tab_confeccion_subsidio = QWidget()
@@ -616,6 +625,9 @@ class FormularioVenta(QWidget):
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_credito_tab)
         self.toggle_prea_credito_tab(self.cmb_tipo_venta.currentText())
 
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_subsidio_tab)
+        self.toggle_prea_subsidio_tab(self.cmb_tipo_venta.currentText())
+
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_docs_pas)
         self.toggle_docs_pas(self.cmb_tipo_venta.currentText())
         
@@ -697,6 +709,12 @@ class FormularioVenta(QWidget):
             return
         mostrar = (not self.en_proceso) and (tipo_venta in ["Credito H.", "Credito H. + Subsidio"])
         self.tabs.setTabVisible(self.tab_prea_credito_index, mostrar)
+
+    def toggle_prea_subsidio_tab(self, tipo_venta):
+        if not hasattr(self,'tab_prea_subsidio_index'):
+            return
+        mostrar = (not self.en_proceso) and (tipo_venta in ["Subsidio", "Credito H. + Subsidio"])
+        self.tabs.setTabVisible(self.tab_prea_subsidio_index, mostrar)
 
     def toggle_docs_pas(self, tipo_venta):
         if not hasattr(self,'tab_docs_pas_index'):
@@ -809,17 +827,41 @@ class FormularioVenta(QWidget):
         self.txt_porc_financiamiento = QLineEdit()
         self.txt_monto_financiamiento = QLineEdit()
         self.txt_diferencias_prea_credito = QTextEdit()
+        self.cmb_estado_aprobacion = QComboBox()
+        self.cmb_estado_aprobacion.addItems(["En trámite","Aprobado","Rechazado"])
+        self.txt_banco_credito = QLineEdit()
         self.checkbox_dif = QCheckBox("¿Existen diferencias?")
         self.checkbox_dif.setChecked(False)
 
         layout.addRow(self.crear_label("Porcentaje de Financiamiento:"), self.txt_porc_financiamiento)
         layout.addRow(self.crear_label("Monto Financiamiento :"), self.txt_monto_financiamiento)
+        layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
+        layout.addRow(self.crear_label("Estado Aprobación:"), self.cmb_estado_aprobacion)
         layout.addWidget(self.checkbox_dif)
         self.lbl_diferencias = self.crear_label("Diferencias:")
         layout.addRow(self.lbl_diferencias, self.txt_diferencias_prea_credito)
         self.lbl_diferencias.hide()
         self.txt_diferencias_prea_credito.hide()
         self.checkbox_dif.stateChanged.connect(self.verificar_dif)
+
+    def setup_tab_prea_subsidio(self, tab):
+        layout = QFormLayout(tab)
+
+        layout.addRow(QLabel("<b> Preaprobación de subsidio :</b>"))
+
+        self.txt_porc_subsidio = QLineEdit()
+        self.txt_monto_subsidio = QLineEdit()
+        self.cmb_estado_subsidio = QComboBox()
+        self.cmb_estado_subsidio.addItems(["En trámite","Aprobado","Rechazado"])
+        self.txt_resolucion_subsidio = QTextEdit()
+        
+        layout.addRow(self.crear_label("Porcentaje de Financiamiento:"), self.txt_porc_subsidio)
+        layout.addRow(self.crear_label("Monto Financiamiento :"), self.txt_monto_subsidio)
+        layout.addRow(self.crear_label("Estado Subsidio:"), self.cmb_estado_subsidio)
+        layout.addRow(self.crear_label("Resolución Subsidio:"), self.txt_resolucion_subsidio)
+        
+        
+
 
         
         
@@ -935,13 +977,15 @@ class FormularioVenta(QWidget):
         self.cmb_doc_tasacion.addItems(["Si Posee Documento", "No Posee Documento"])
         self.cmb_doc_dj_vend_no_habitual = QComboBox()
         self.cmb_doc_dj_vend_no_habitual.addItems(["Si Posee Documento", "No Posee Documento"])
-        self.txt_banco_credito = QLineEdit()
+        self.cmb_estado_aprobacion = QComboBox()
+        self.cmb_estado_aprobacion.addItems(["En trámite","Aprobado","Rechazado"])
+        
 
 
         layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_confe)
         layout.addRow(self.crear_label("Documento Tasación:"), self.cmb_doc_tasacion)
         layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
-        layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
+        
 
     # **************************************************************************************************************************
     def setup_tab_confeccion_subsidio_credito(self, tab):
@@ -972,7 +1016,7 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Documento Subsidio Original:"), self.cmb_doc_subsidio_original)
         layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
         layout.addRow(self.crear_label("Declaración Jurada No Inhabilidad:"), self.cmb_doc_dj_comp_no_parientes_cargos_publicos)
-        layout.addRow(self.crear_label("Banco que concede el credito:"), self.txt_banco_credito)
+        
 
         layout.addRow(QLabel("<b>Validación de Abonos:</b>"))
 
@@ -1256,10 +1300,11 @@ class FormularioVenta(QWidget):
                 return
             venta = venta_resp.data[0]
 
-            self.txt_observaciones.setPlainText(venta.get("observaciones", ""))
-            self.txt_monto.setText(str(venta.get("monto_venta", "")))
             self.date_fecha.setDate(QDate.fromString(venta.get("fecha_venta", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
+            self.txt_monto.setText(str(venta.get("monto_venta", "")))
+            self.txt_observaciones.setPlainText(venta.get("observaciones", ""))
 
+            
             # Obtener el tubo
             tubo_id = venta.get("tubo_id")
             tubo_resp = supabase.table("tubo").select("*").eq("id", tubo_id).execute()
@@ -1271,16 +1316,8 @@ class FormularioVenta(QWidget):
                 self.cmb_prop_ofrecida.setCurrentText(tubo.get("propiedad_ofrecida", "No"))
                 self.cmb_regularizaciones.setCurrentText(tubo.get("regularizaciones_ampliaciones", "No"))
 
-            # Obtener la propiedad
-            codigo = tubo.get("codigo_interno")
-            propiedad_resp = supabase.table("propiedad").select("*").eq("codigo_interno", codigo).execute()
-            if propiedad_resp.data:
-                prop = propiedad_resp.data[0]
-                self.txt_prop_direccion.setText(prop.get("direccion", ""))
-                self.txt_prop_rol.setText(str(prop.get("rol", "")))
-                self.txt_prop_comuna.setText(prop.get("comuna", ""))
-                self.cmb_estudio_titulos.setCurrentText(prop.get("estudio_titulos", "No Posee Documento"))
-                self.cmb_inscripcion.setCurrentText(prop.get("inscripcion", "No Posee Documento"))
+            tipo_venta = self.cmb_tipo_venta.setCurrentText()
+            tipo_posesion = self.cmb_tipo_pos.setCurrentText()                
 
             # Obtener comprador
             rut_comp = venta.get("comprador_rut")
@@ -1290,7 +1327,14 @@ class FormularioVenta(QWidget):
                     comp = comp_resp.data[0]
                     self.txt_comp_nombre.setText(comp.get("nombre", ""))
                     self.txt_comp_rut.setText(comp.get("rut", ""))
-                    # etc.
+                    self.txt_comp_direccion.setText(comp.get("direccion", ""))
+                    self.txt_comp_telefono.setText(comp.get("telefono", ""))
+                    self.txt_comp_email.setText(comp.get("email", ""))
+                    self.txt_comp_banco.setText(comp.get("banco", ""))
+                    self.txt_vcompta.setText(comp.get("tipo_cuenta", ""))
+                    self.txt_comp_nro_cuenta.setText(comp.get("nro_cuenta", ""))
+                    self.cmb_comp_poder.setCurrentText(comp.get("Si", "No"))
+                    
 
             # Obtener vendedor
             rut_vend = venta.get("vendedor_rut")
@@ -1300,7 +1344,115 @@ class FormularioVenta(QWidget):
                     vend = vend_resp.data[0]
                     self.txt_vend_nombre.setText(vend.get("nombre", ""))
                     self.txt_vend_rut.setText(vend.get("rut", ""))
-                    # etc.
+                    self.txt_vend_direccion.setText(vend.get("direccion", ""))
+                    self.txt_vend_telefono.setText(vend.get("telefono", ""))
+                    self.txt_vend_email.setText(vend.get("email", ""))
+                    self.txt_vend_banco.setText(vend.get("banco", ""))
+                    self.txt_vend_tipo_cuenta.setText(vend.get("tipo_cuenta", ""))
+                    self.txt_vend_nro_cuenta.setText(vend.get("nro_cuenta", ""))
+                    self.cmb_vend_poder.setCurrentText(vend.get("Si", "No"))
+
+
+            # Obtener la propiedad
+            codigo = tubo.get("codigo_interno")
+            propiedad_resp = supabase.table("propiedad").select("*").eq("codigo_interno", codigo).execute()
+            
+            if propiedad_resp.data:
+                prop = propiedad_resp.data[0]
+                self.txt_prop_codigo.setText(prop.get("codigo_interno", ""))
+                self.txt_prop_direccion.setText(prop.get("direccion", ""))
+                self.txt_prop_rol.setText(str(prop.get("rol", "")))
+                self.txt_prop_comuna.setText(prop.get("comuna", ""))
+                self.cmb_estudio_titulos.setCurrentText(prop.get("estudio_titulos", "No Posee Documento"))
+                self.cmb_inscripcion.setCurrentText(venta.get("inscripcion", "No Posee Documento"))
+                self.cmb_dominio_vigente.setCurrentText(prop.get("dominio_vigente","No Posee Documento"))
+                self.cmb_hipoteca.setCurrentText(venta.get("hipoteca","No Posee Documento"))
+                self.cmb_gravamen.setCurrentText(venta.get("gravamen","No Posee Documento"))
+                self.cmb_certificado_numero.setCurrentText(venta.get("certificado_numero","No Posee Documento"))
+                self.cmb_aseo.setCurrentText(venta.get("aseo","No Posee Documento"))
+                self.cmb_no_expropiacion.setCurrentText(venta.get("no_expropiacion","No Posee Documento"))
+            
+            if tipo_venta == "Posesion Efectiva":
+                # Obtener posesion efectiva
+                posesion_resp = supabase.table("posesion_efectiva").select("*").eq("codigo_interno", codigo).execute()
+                if posesion_resp.data:
+                    pos = posesion_resp.data[0]
+
+                    self.cmb_tipo_pos.setCurrentText(pos.get("tipo_posesion","No Posee Documento"))
+                    self.cmb_canal.setCurrentText(pos.get("canal","No Posee Documento"))
+                    self.cmb_estado_proceso.setCurrentText(pos.get("estado_proceso","No Posee Documento"))
+                    self.txt_obs_pos.setPlainText(pos.get("observaciones", ""))
+                
+                # Obtener herederos
+                herederos_resp = supabase.table("herederos").select("*").eq("codigo_interno", codigo).execute()
+                
+                if herederos_resp.data:
+                    self.tabla_herederos.setRowCount(0)
+                    
+                    for idx, heredero in enumerate(herederos_resp.data):
+                        self.tabla_herederos.insertRow(idx)
+                        self.tabla_herederos.setItem(idx, 0, QTableWidgetItem(heredero.get("nombre", "")))
+                        self.tabla_herederos.setItem(idx, 1, QTableWidgetItem(heredero.get("rut", "")))
+                        porcentaje = heredero.get("porcentaje", "")
+
+                        if isinstance(porcentaje, (int, float)):
+                            porcentaje = f"{porcentaje}%"
+
+                        self.tabla_herederos.setItem(idx, 2, QTableWidgetItem(str(porcentaje)))
+                        self.tabla_herederos.setItem(idx, 3, QTableWidgetItem(heredero.get("tipo_heredero", "")))
+
+
+
+
+
+
+
+
+
+
+            
+            if tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
+                # Obtener recepcion definitiva
+                recepcion_resp = supabase.table("recepcion_definitiva").select("*").eq("codigo_interno", codigo).execute()
+                if recepcion_resp.data:
+                    recep = recepcion_resp.data[0]
+            
+                    self.cmb_superficie.setCurrentText(recep.get("superficie","No Posee Documento"))
+                    self.cmb_edificada.setCurrentText(recep.get("edificada","No Posee Documento"))
+                    self.cmb_recepcion.setCurrentText(recep.get("recepcion","No Posee Documento"))
+                    
+            
+            
+                # Obtener Tasador en caso de venta con "Subsidio", "Credito H.", "Credito H. + Subsidio"
+
+                tasador_resp = supabase.table("tasador").select("*").eq("codigo_interno", codigo).execute()
+
+                if tasador_resp.data:
+                    tas = recepcion_resp.data[0]
+
+                    self.txt_tas_nombre.setText(tas.get("nombre",""))
+                    self.txt_tas_rut.setText(tas.get("rut",""))
+                    self.txt_tas_telefono.setText(tas.get("telefono",""))
+                    self.txt_tas_email.setText(tas.get("correo_electronico",""))
+
+                # Obtener documentos tasacion
+
+                tasacion_docs_resp = supabase.table("documentos_tasacion").select("*").eq("codigo_interno", codigo)
+
+                if tasacion_docs_resp.data:
+
+                    tas_docs = tasacion_docs_resp.data[0]
+
+                    self.cmb_doc_propiedad_tas.setCurrentText(tas_docs.get("doc_propiedad","No Posee Documento"))
+                    self.cmb_copia_subsidio.setCurrentText(tas_docs.get("copia_subsidio","No Posee Documento"))
+                    self.cmb_informe_tasacion.setCurrentText(tas_docs.get("informe_tasacion ","No Posee Documento"))
+                    self.cmb_certif_habitabilidad.setCurrentText(tas_docs.get("certif_habitabilidad","No Posee Documento"))
+                    
+
+                #Falta las pre aprobaciones, la confeccion y los docs pas CREO
+
+
+
 
         except Exception as e:
             print(f"Error al cargar venta: {str(e)}")
@@ -1344,8 +1496,16 @@ class FormularioVenta(QWidget):
                     'porcentaje_financiamiento': self.txt_porc_financiamiento.text(),
                     'monto_financiamiento': self.txt_monto_financiamiento.text(),
                     'diferencias': self.txt_diferencias_prea_credito.toPlainText(),
-                    'banco_credito': self.txt_banco_credito.text()
+                    'banco_credito': self.txt_banco_credito.text(),
+                    'estado_preaprobacion': self.cmb_estado_aprobacion.currentText()
                 },
+                'subsidio_aprobado' : {
+                    'monto_subsidio': self.txt_monto_subsidio.text(),
+                    'porcentaje_subsidio': self.txt_porc_subsidio.text(),
+                    'resolucion_subsidio ': self.txt_resolucion_subsidio.toPlainText(),
+                    'estado_subsidio': self.cmb_estado_subsidio.currentText()
+                },
+
                 'tasador':{
                     'nombre': self.txt_tas_nombre.text(),
                     'rut': self.txt_tas_rut.text(),

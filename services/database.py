@@ -312,7 +312,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'porcentaje_financiamiento': data_venta['pre_aprobacion_credito']['porcentaje_financiamiento'],
                 'monto_financiamiento': data_venta['pre_aprobacion_credito']['monto_financiamiento'],
                 'diferencias': data_venta['pre_aprobacion_credito'].get('diferencias',''),
-                'banco_credito': data_venta['pre_aprobacion_credito']['banco_credito']
+                'banco_credito': data_venta['pre_aprobacion_credito']['banco_credito'],
+                'estado_preaprobacion':data_venta['pre_aprobacion_credito']['estado_preaprobacion']
             }
 
             porcentaje_str = pre_aprobacion_data.get('porcentaje_financiamiento', '0')  # siempre un string
@@ -325,7 +326,18 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
             supabase.table("pre_aprobacion_credito").upsert(pre_aprobacion_data).execute()
 
-        
+        if es_venta_cerrada and tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
+
+            subsidio_aprobado_data = {
+                'codigo_interno': data_venta['propiedad']['codigo'],
+                'monto_subsidio': data_venta['subsidio_aprobado']['monto_subsidio'],
+                'porcentaje_subsidio': data_venta['subsidio_aprobado']['porcentaje_subsidio'],
+                'resolucion_subsidio': data_venta['subsidio_aprobado'].get('resolucion_subsidio', ''),
+                'estado_subsidio': data_venta['subsidio_aprobado']['estado_subsidio']
+            }
+
+            supabase.table("subsidio_aprobado").upsert(subsidio_aprobado_data).execute()
+
 
             
 
@@ -487,7 +499,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'codigo_interno': data_venta['propiedad']['codigo'],
                 'tipo_posesion': data_posesion.get('tipo', 'intestada'),
                 'canal': data_posesion.get('canal', 'registro civil'),
-                'estado_proceso': data_posesion.get('estado_proceso', 'solicitud')
+                'estado_proceso': data_posesion.get('estado_proceso', 'solicitud'),
+                'observaciones': data_posesion.get('observaciones', '')
             }
             supabase.table("posesion_efectiva").upsert(posesion_data).execute()
             
