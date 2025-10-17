@@ -867,10 +867,7 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Estado Subsidio:"), self.cmb_estado_subsidio)
         layout.addRow(self.crear_label("Resolución Subsidio:"), self.txt_resolucion_subsidio)
         
-        
-
-
-        
+                
         
     
     def verificar_dif(self):
@@ -880,8 +877,6 @@ class FormularioVenta(QWidget):
 
     
     
-    
-       
 
         
  
