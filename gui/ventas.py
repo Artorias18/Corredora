@@ -57,6 +57,13 @@ class DetalleVentaWindow(QWidget):
         # Pestaña de posesión efectiva (si aplica)
         if self.detalle_venta.get('venta', {}).get('tipo_venta') == 'Posesion Efectiva':
             self.setup_tab_pos_efectiva()
+
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
+            self.setup_tab_tasador()
+            
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') == 'Subsidio':
+            self.setup_tab_prea_sub()
+            self.setup_tab
         
         # Botón para cerrar
         btn_cerrar = QPushButton("Cerrar")
@@ -879,6 +886,39 @@ class FormularioVenta(QWidget):
         
  
 
+    def on_abono_previo_cambiado_subsidio(self, texto):
+        try:
+            self.abono_previo_val = float(texto.replace(",", "."))
+        except ValueError:
+            self.abono_previo_val = None  # si no es número válido
+        self.validar_abono_subsidio()
+
+    def on_abono_real_cambiado_subsidio(self, texto):
+        try:
+            self.abono_real_val = float(texto.replace(",", "."))
+        except ValueError:
+            self.abono_real_val = None
+        self.validar_abono_subsidio()
+
+    def validar_abono_subsidio(self):
+            if self.abono_previo_val is None or self.abono_real_val is None:
+                self.lbl_validacion_abono_subsidio.setText("Debe ingresar valores validos en los abonos para hacer la validación")
+                self.lbl_validacion_abono_subsidio.setStyleSheet("color:red")
+                return
+            
+            if self.abono_previo_val is not None and self.abono_real_val is not None:
+                dif_a_pagar = self.abono_real_val - self.abono_previo_val
+
+            if self.abono_previo_val >= self.abono_real_val:
+                self.lbl_validacion_abono_subsidio.setText(f"El abono previo cubre o supera el abono real: {dif_a_pagar}")
+                self.lbl_validacion_abono_subsidio.setStyleSheet("color: green;")
+            else:
+                self.lbl_validacion_abono_subsidio.setText(f"El abono real es mayor al abono previo, el comprador debe depositar: {dif_a_pagar}")
+                self.lbl_validacion_abono_subsidio.setStyleSheet("color: orange;")
+
+       
+ 
+
     def setup_tab_confeccion_subsidio(self, tab):
         layout = QFormLayout(tab)
 
@@ -921,17 +961,17 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Abono previo:"), self.txt_abono_previo)
         layout.addRow(self.crear_label("Abono real:"), self.txt_abono_real)
 
-        self.lbl_validacion_abono = QLabel("Ingrese ambos abonos para validar")
-        self.lbl_validacion_abono.setMinimumHeight(30)
-        self.lbl_validacion_abono.setAlignment(Qt.AlignLeft)
-        layout.addRow(QLabel("Resultado validación:"), self.lbl_validacion_abono)
+        self.lbl_validacion_abono_subsidio = QLabel("Ingrese ambos abonos para validar")
+        self.lbl_validacion_abono_subsidio.setMinimumHeight(30)
+        self.lbl_validacion_abono_subsidio.setAlignment(Qt.AlignLeft)
+        layout.addRow(QLabel("Resultado validación:"), self.lbl_validacion_abono_subsidio)
 
         self.abono_previo_val = None
         self.abono_real_val = None
 
         # Conectar señales
-        self.txt_abono_previo.textChanged.connect(self.on_abono_previo_cambiado)
-        self.txt_abono_real.textChanged.connect(self.on_abono_real_cambiado)
+        self.txt_abono_previo.textChanged.connect(self.on_abono_previo_cambiado_subsidio)
+        self.txt_abono_real.textChanged.connect(self.on_abono_real_cambiado_subsidio)
 
     def on_abono_previo_cambiado(self, texto):
         try:
@@ -1317,7 +1357,7 @@ class FormularioVenta(QWidget):
                 self.cmb_regularizaciones.setCurrentText(tubo.get("regularizaciones_ampliaciones", "No"))
 
             tipo_venta = self.cmb_tipo_venta.setCurrentText()
-            tipo_posesion = self.cmb_tipo_pos.setCurrentText()                
+                        
 
             # Obtener comprador
             rut_comp = venta.get("comprador_rut")
@@ -1378,9 +1418,9 @@ class FormularioVenta(QWidget):
                 if posesion_resp.data:
                     pos = posesion_resp.data[0]
 
-                    self.cmb_tipo_pos.setCurrentText(pos.get("tipo_posesion","No Posee Documento"))
-                    self.cmb_canal.setCurrentText(pos.get("canal","No Posee Documento"))
-                    self.cmb_estado_proceso.setCurrentText(pos.get("estado_proceso","No Posee Documento"))
+                    self.cmb_tipo_pos.setCurrentText(pos.get("tipo_posesion"))
+                    self.cmb_canal.setCurrentText(pos.get("canal"))
+                    self.cmb_estado_proceso.setCurrentText(pos.get("estado_proceso"))
                     self.txt_obs_pos.setPlainText(pos.get("observaciones", ""))
                 
                 # Obtener herederos
@@ -1400,15 +1440,6 @@ class FormularioVenta(QWidget):
 
                         self.tabla_herederos.setItem(idx, 2, QTableWidgetItem(str(porcentaje)))
                         self.tabla_herederos.setItem(idx, 3, QTableWidgetItem(heredero.get("tipo_heredero", "")))
-
-
-
-
-
-
-
-
-
 
             
             if tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
@@ -1449,7 +1480,71 @@ class FormularioVenta(QWidget):
                     self.cmb_certif_habitabilidad.setCurrentText(tas_docs.get("certif_habitabilidad","No Posee Documento"))
                     
 
-                #Falta las pre aprobaciones, la confeccion y los docs pas CREO
+                
+
+            if tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
+
+                # Obtener pre aprobacion credito
+
+                prea_cred_resp = supabase.table("subsidio_aprobado").select("*").eq("codigo_interno", codigo)
+
+                if prea_cred_resp.data:
+
+                    prea = prea_cred_resp.data[0]
+                    
+                    self.txt_porc_subsidio.setText(str(prea.get("porcentaje_subsidio", "")))
+                    self.txt_monto_subsidio.setText(str(prea.get("monto_subsidio", "")))
+                    self.cmb_estado_subsidio.setCurrentText(prea.get("estado_subsidio", "Sin definir"))
+                    self.txt_resolucion_subsidio.setPlainText(prea.get("resolucion_subsidio", ""))
+
+                # Obtener confeccion escritura
+
+                confeccion_sub_resp = supabase.table("documentos_escritura").select("*").eq("codigo_interno", codigo)
+
+                if confeccion_sub_resp.data:
+
+                    confe_sub = confeccion_sub_resp.data[0]
+
+                    self.cmb_doc_propiedad_confe.setCurrentText(confe_sub.get("doc_propiedad","No Posee Documento"))
+                    self.cmb_doc_tasacion.setCurrentText(confe_sub.get("doc_tasacion","No Posee Documento"))
+                    self.cmb_doc_dj_no_parent_comp_vend.setCurrentText(confe_sub.get("dj_no_parent_comp_vend","No Posee Documento"))
+                    self.cmb_doc_subsidio_original.setCurrentText(confe_sub.get("subsidio_original","No Posee Documento"))
+                    self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_sub.get("dj_vend_no_habitual","No Posee Documento"))
+                    self.cmb_doc_dj_comp_no_parientes_cargos_publicos.setCurrentText(confe_sub.get("dj_comp_no_parientes_cargos_publicos","No Posee Documento"))
+
+                    self.txt_abono_previo.setText(str(venta.get("abono_previsto", "")))
+                    self.txt_abono_real.setText(str(venta.get("abono_real", "")))
+                
+                # Obtener docs pas
+
+                docs_pas_resp = supabase.table("documentos_pas").select("*").eq("codigo_interno", codigo)
+
+                if docs_pas_resp.data:
+
+                    doc_pas = docs_pas_resp.data[0]
+
+                    self.fecha_ingreso_documentos.setDate(QDate.fromString(doc_pas.get("fecha_ingreso_docs", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
+                    self.cmb_supe_platas.setCurrentText(doc_pas.get("supe_platas"))
+                    self.txt_reparos.setPlainText(doc_pas.get("reparos", ""))
+
+
+            
+
+            if tipo_venta in ["Credito H", "Credito H. + Subsidio"]:
+                
+                # Obtener pre aprobacion de credito
+
+                prea_cred_resp = supabase.table("pre_aprobacion_credito").select("*").eq("codigo_interno",codigo)
+
+                if prea_cred_resp.data:
+
+                    prea_cred = prea_cred_resp.data[0]
+
+                    self.txt_porc_financiamiento.setText(str(prea_cred.get("porcentaje_financiamiento","")))
+                    self.txt_monto_financiamiento.setText(str(prea_cred.get("monto_financiamiento","")))
+                    self.txt_banco_credito.setText(prea_cred.get("banco_credito",""))
+                    self.cmb_estado_aprobacion.setCurrentText(prea_cred.get("estado_preaprobacion"))
+                    self.txt_diferencias_prea_credito.setPlainText("diferencias","")
 
 
 
@@ -1480,6 +1575,7 @@ class FormularioVenta(QWidget):
                 return
             print("Validación correcta, preparando datos")
             # Preparar datos de la venta
+            
             data_venta = {
                 'comprador': {
                     'nombre': self.txt_comp_nombre.text(),

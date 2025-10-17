@@ -336,6 +336,15 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'estado_subsidio': data_venta['subsidio_aprobado']['estado_subsidio']
             }
 
+            porcentaje_sub_str = subsidio_aprobado_data.get('porcentaje_subsidio', '0')
+            try:
+                porcentaje_sub = float(porcentaje_sub_str)
+
+            except ValueError:
+                porcentaje_sub = 0
+            
+            subsidio_aprobado_data['porcentaje_subsidio'] = porcentaje_sub / 100
+
             supabase.table("subsidio_aprobado").upsert(subsidio_aprobado_data).execute()
 
 
