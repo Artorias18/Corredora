@@ -1,14 +1,8 @@
-# 🧱 Ignorar entornos virtuales
+# Ignorar entorno virtual
 .venv/
 venv/
 env/
-
-# 🗂️ Ignorar carpetas del intérprete de Python
+Lib/
+Scripts/
+services/supabase_client.py
 __pycache__/
-*.pyc
-
-# 🔐 Ignorar archivos de entorno con credenciales
-*.env
-
-# 🚫 (Ya no ignoramos supabase_client.py)
-# services/supabase_client.py
