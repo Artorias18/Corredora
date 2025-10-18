@@ -490,6 +490,14 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             if abono_real:
                 venta_data['abono_real'] = abono_real
 
+            print("=== VALIDACIÓN DE ABONOS ===")
+            print("Abono previsto (texto):", abono_prev_texto)
+            print("Abono real (texto):", abono_real_texto)
+            print("Abono previsto (convertido):", abono_previo)
+            print("Abono real (convertido):", abono_real)
+            print("Campos en venta_data:", {k: v for k, v in venta_data.items() if 'abono' in k})
+            print("=============================")
+
             documentos_pas_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
                 'fecha_ingreso_docs': data_venta['documentos_pas']['fecha_ingreso_docs'],
