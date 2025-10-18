@@ -60,10 +60,17 @@ class DetalleVentaWindow(QWidget):
 
         if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
             self.setup_tab_tasador()
+        
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Credito H.","Credito H. + Subsidio"]:
+            self.setup_tab_prea_cred()
             
-        if self.detalle_venta.get('venta', {}).get('tipo_venta') == 'Subsidio':
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Subsidio", "Credito H. + Subsidio"]:
             self.setup_tab_prea_sub()
-            self.setup_tab
+            self.setup_tab_confe_subsidio()
+            self.setup_tab_docs_pas()
+
+        
+            
         
         # Botón para cerrar
         btn_cerrar = QPushButton("Cerrar")
@@ -81,7 +88,7 @@ class DetalleVentaWindow(QWidget):
         campos = [
             ("ID Venta", venta.get('id')),
             ("Fecha", venta.get('fecha_venta')),
-            ("Monto", f"${venta.get('monto_venta', 0):,.0f}" if venta.get('monto_venta') else "No especificado"),
+            ("Monto", f"${int(venta.get('monto_venta', 0)):,}" if venta.get('monto_venta') else "No especificado"),
             ("Tipo de venta", venta.get('tipo_venta')),
             ("Estado", venta.get('estado_venta', '').capitalize()),
             ("Propiedad ofrecida", venta.get('propiedad_ofrecida')),
@@ -152,24 +159,24 @@ class DetalleVentaWindow(QWidget):
         documentacion = self.detalle_venta.get('documentacion', {})
         
         # Información básica
-        form_basica = QFormLayout()
+        form_total = QFormLayout()
+
+        # Campos básicos
         campos_basicos = [
             ("Código interno", propiedad.get('codigo_interno')),
             ("Dirección", propiedad.get('direccion')),
             ("ROL", propiedad.get('rol')),
             ("Comuna", propiedad.get('comuna'))
         ]
-        
+
         for label, value in campos_basicos:
             if value:
-                form_basica.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
-        
-        layout.addLayout(form_basica)
-        
-        # Documentación
-        layout.addWidget(QLabel("<b>Documentación:</b>"))
-        
-        form_doc = QFormLayout()
+                form_total.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        # Encabezado documentación
+        form_total.addRow(QLabel("<b>Documentación:</b>"), QLabel(""))
+
+        # Campos documentación
         campos_doc = [
             ("Estudio de títulos", propiedad.get('estudio_titulos')),
             ("Inscripción", venta.get('inscripcion')),
@@ -178,17 +185,21 @@ class DetalleVentaWindow(QWidget):
             ("Gravamen", venta.get('gravamen')),
             ("Certificado número", venta.get('certificado_numero')),
             ("Aseo", venta.get('aseo')),
-            ("No expropiación", venta.get('no_expropiacion')),
-            ("Superficie", documentacion.get('superficie')),
-            ("Edificada", documentacion.get('edificada')),
-            ("Recepción", documentacion.get('recepcion'))
+            ("No expropiación", venta.get('no_expropiacion')),   
         ]
-        
+
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
+            campos_doc.extend([
+                ("Superficie", documentacion.get('superficie')),
+                ("Edificada", documentacion.get('edificada')),
+                ("Recepción", documentacion.get('recepcion'))
+            ])
+
         for label, value in campos_doc:
             if value:
-                form_doc.addRow(QLabel(f"{label}:"), QLabel(str(value)))
-        
-        layout.addLayout(form_doc)
+                form_total.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+        layout.addLayout(form_total)
     
     def setup_tab_pos_efectiva(self):
         tab = QWidget()
@@ -234,6 +245,192 @@ class DetalleVentaWindow(QWidget):
         
         tabla.resizeColumnsToContents()
         layout.addWidget(tabla)
+
+    def setup_tab_tasador(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Tasador")
+        layout = QFormLayout(tab)
+
+        tasador_response = supabase.table("tasador").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        docs_tas_response = supabase.table("documentos_tasacion").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        docs_tas = docs_tas_response.data[0] if docs_tas_response.data else {}
+
+
+        tasador = tasador_response.data[0]
+
+        if tasador:
+            layout.addRow(QLabel("<b>Información Tasador:</b>"), QLabel(""))
+
+            # Campos básicos del tasador
+            campos_tas = [
+                ("Nombre", tasador.get('nombre', '')),
+                ("Rut", tasador.get('rut', '')),
+                ("Teléfono", tasador.get('telefono', '')),
+                ("Email", tasador.get('correo_electronico', ''))
+            ]
+
+            for label, value in campos_tas:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+            # 👇 Ahora recién agregamos el encabezado de documentación
+            layout.addRow(QLabel("<b>Documentación:</b>"), QLabel(""))
+
+            if docs_tas:
+                campos_docs = [
+                    ("Documento Propiedad", docs_tas.get('doc_propiedad', '')),
+                    ("Copia Subsidio", docs_tas.get('copia_subsidio', '')),
+                    ("Informe de Tasación", docs_tas.get('informe_tasacion', '')),
+                    ("Certificado Habitabilidad", docs_tas.get('certif_habitabilidad', ''))
+                ]
+                for label, value in campos_docs:
+                    layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+                
+
+    def setup_tab_prea_sub(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Preaprobación Subsidio")
+        layout = QFormLayout(tab)
+
+        subsidio_response = supabase.table("subsidio_aprobado").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        
+        subsidio = subsidio_response.data[0]
+
+        if subsidio:
+            layout.addRow(QLabel("<b>Preaprobación de Subsidio:</b>"), QLabel(""))
+
+            campos_subsidio = [
+                ("Porcentaje de Financiamiento", f"{subsidio.get('porcentaje_subsidio','') * 100}%"),
+                ("Monto Financiamiento", f"${int(subsidio.get('monto_subsidio')):,}" if subsidio.get('monto_subsidio') else "No especificado"),
+                ("Estado Subsidio", subsidio.get('estado_subsidio')),
+                
+            ]
+
+            resolucion = subsidio.get('resolucion_subsidio')
+
+            if resolucion:
+                campos_subsidio.extend([
+                    ("Resolución", resolucion),
+                ])
+
+            for label, value in campos_subsidio:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+    
+
+
+
+    def setup_tab_confe_subsidio(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Confección")
+        layout = QFormLayout(tab)
+        confe_response = supabase.table("documentos_escritura").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        confeccion = confe_response.data[0] if confe_response.data else {}
+        venta = self.detalle_venta.get('venta', {})
+
+        if confeccion:
+            layout.addRow(QLabel("<b>Documentos Confección:</b>"), QLabel(""))
+
+            campos_confeccion = [
+                ("Documento Propiedad", confeccion.get('doc_propiedad')),
+                ("Documento Tasación", confeccion.get('doc_tasacion')),
+                ("Declaración Jurada no parentesco comprador/vendedor", confeccion.get('dj_no_parent_comp_vend')),
+                ("Documento Subsidio Original", confeccion.get('subsidio_original')),
+                ("Declaración Jurada vendedor no habitual", confeccion.get('dj_vend_no_habitual')),
+                ("Declaración Jurada No Inhabilidad", confeccion.get('dj_comp_no_parientes_cargos_publicos')),
+            ]
+            
+            for label, value in campos_confeccion:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+
+            layout.addRow(QLabel("<b>Abonos:</b>"), QLabel(""))
+
+            campos_abonos = [
+                ("Abono Previo",f"${int(venta.get('abono_previsto')):,}" if venta.get('abono_previsto') else "No especificado"),
+                ("Abono Real",f"${int(venta.get('abono_real')):,}" if venta.get('abono_real') else "No especificado"),
+                ("Saldo Pendiente",f"${int(venta.get('saldo_pendiente')):,}" if venta.get('saldo_pendiente') else "No especificado")
+            ]
+
+            for label, value in campos_abonos:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+    def setup_tab_docs_pas(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Documentos PAS")
+        layout = QFormLayout(tab)
+        docs_pas_response = supabase.table("documentos_pas").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        
+        pas = docs_pas_response.data[0] if docs_pas_response.data else {}
+
+        if pas:
+            layout.addRow(QLabel("<b>Documentos PAS:</b>"), QLabel(""))
+            campos_pas = [
+                ("Fecha de ingreso documentos", pas.get('fecha_ingreso_docs')),
+                ("Estado de Custodia y Pago", pas.get('supe_platas')),
+            ]
+
+            reparos = pas.get('reparos')
+
+            if reparos:
+                campos_pas.extend([
+                ("Reparos", reparos),
+                 ])
+                
+            for label, value in campos_pas:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+
+
+    def setup_tab_prea_cred(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Preaprobación Credito")
+        layout = QFormLayout(tab)
+        prea_cred_response = supabase.table("pre_aprobacion_credito").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        credito = prea_cred_response.data[0] if prea_cred_response.data else {}
+
+        if credito:
+            campos_credito = [
+                ("Porcentaje de Financiamiento",f"{credito.get('porcentaje_financiamiento','') * 100}%"),
+                ("Monto Financiamiento",f"${int(credito.get('monto_financiamiento')):,}" if credito.get('monto_financiamiento') else "No especificado"),
+                ("Banco que concede el credito", credito.get('banco_credito','')),
+                ("Estado Aprobación", credito.get('estado_preaprobacion'))
+            ]
+
+            diferencias = credito.get('diferencias')
+            
+            if diferencias:
+                campos_credito.extend([
+                    ('Diferencias', diferencias),
+                ])
+
+            for label, value in campos_credito:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+    
+    
+    
+    def setup_tab_confe_cred(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Confección")
+        layout = QFormLayout(tab)
+        confe_cred_response = supabase.table("documentos_escritura").select("doc_propiedad, doc_tasacion, dj_vend_no_habitual").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        confe_cred = confe_cred_response.data[0] if confe_cred_response else {}
+
+        if confe_cred:
+            campos_cred = [
+                ("Documento Propiedad", confe_cred.get('doc_propiedad')),
+                ("Documento Tasación", confe_cred.get('doc_tasacion')),
+                ("Declaración Jurada vendedor no habitual", confe_cred.get('dj_vend_no_habitual'))
+            ]
+
+            for label, value in campos_cred:
+                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+
+
+
 
 class DashboardVentas(QMainWindow):
     def __init__(self, rol, parent=None):
@@ -877,8 +1074,6 @@ class FormularioVenta(QWidget):
 
     
     
-
-        
  
 
     def on_abono_previo_cambiado_subsidio(self, texto):
@@ -1022,7 +1217,7 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Declaración Jurada vendedor no habitual:"), self.cmb_doc_dj_vend_no_habitual)
         
 
-    # **************************************************************************************************************************
+ 
     def setup_tab_confeccion_subsidio_credito(self, tab):
         layout = QFormLayout(tab)
 
@@ -1042,7 +1237,7 @@ class FormularioVenta(QWidget):
         self.cmb_doc_dj_comp_no_parientes_cargos_publicos.addItems(["Si Posee Documento", "No Posee Documento"])
         self.txt_abono_previo = QLineEdit()
         self.txt_abono_real = QLineEdit()
-        self.txt_banco_credito = QLineEdit()
+        
 
 
         layout.addRow(self.crear_label("Documento Propiedad:"), self.cmb_doc_propiedad_confe)
@@ -1463,7 +1658,7 @@ class FormularioVenta(QWidget):
 
                 # Obtener documentos tasacion
 
-                tasacion_docs_resp = supabase.table("documentos_tasacion").select("*").eq("codigo_interno", codigo)
+                tasacion_docs_resp = supabase.table("documentos_tasacion").select("*").eq("codigo_interno", codigo).execute()
 
                 if tasacion_docs_resp.data:
 
@@ -1481,7 +1676,7 @@ class FormularioVenta(QWidget):
 
                 # Obtener pre aprobacion credito
 
-                prea_cred_resp = supabase.table("subsidio_aprobado").select("*").eq("codigo_interno", codigo)
+                prea_cred_resp = supabase.table("subsidio_aprobado").select("*").eq("codigo_interno", codigo).execute()
 
                 if prea_cred_resp.data:
 
@@ -1494,7 +1689,7 @@ class FormularioVenta(QWidget):
 
                 # Obtener confeccion escritura
 
-                confeccion_sub_resp = supabase.table("documentos_escritura").select("*").eq("codigo_interno", codigo)
+                confeccion_sub_resp = supabase.table("documentos_escritura").select("*").eq("codigo_interno", codigo).execute()
 
                 if confeccion_sub_resp.data:
 
@@ -1512,7 +1707,7 @@ class FormularioVenta(QWidget):
                 
                 # Obtener docs pas
 
-                docs_pas_resp = supabase.table("documentos_pas").select("*").eq("codigo_interno", codigo)
+                docs_pas_resp = supabase.table("documentos_pas").select("*").eq("codigo_interno", codigo).execute()
 
                 if docs_pas_resp.data:
 
@@ -1529,7 +1724,7 @@ class FormularioVenta(QWidget):
                 
                 # Obtener pre aprobacion de credito
 
-                prea_cred_resp = supabase.table("pre_aprobacion_credito").select("*").eq("codigo_interno",codigo)
+                prea_cred_resp = supabase.table("pre_aprobacion_credito").select("*").eq("codigo_interno",codigo).execute()
 
                 if prea_cred_resp.data:
 
@@ -1540,6 +1735,19 @@ class FormularioVenta(QWidget):
                     self.txt_banco_credito.setText(prea_cred.get("banco_credito",""))
                     self.cmb_estado_aprobacion.setCurrentText(prea_cred.get("estado_preaprobacion"))
                     self.txt_diferencias_prea_credito.setPlainText("diferencias","")
+
+
+                # Obtener confección credito
+
+                confe_cred_resp = supabase.table("documentos_escritura").select("doc_propiedad, doc_tasacion, dj_vend_no_habitual").eq("codigo_interno", codigo).execute()
+
+                if confe_cred_resp.data:
+
+                    confe_cred = confe_cred_resp.data[0]
+
+                    self.cmb_doc_propiedad_confe.setCurrentText(confe_cred.get("doc_propiedad","No Posee Documento"))
+                    self.cmb_doc_tasacion.setCurrentText(confe_cred.get("doc_tasacion","No Posee Documento"))
+                    self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_cred.get("dj_vend_no_habitual","No Posee Documento"))
 
 
 
@@ -1561,6 +1769,7 @@ class FormularioVenta(QWidget):
             label.setProperty("obligatorio", "true")
         return label
     
+    
     def guardar_venta(self):
         print("guardar_venta llamada")
         try:
@@ -1570,6 +1779,14 @@ class FormularioVenta(QWidget):
                 return
             print("Validación correcta, preparando datos")
             # Preparar datos de la venta
+
+            banco_credito_val = self.txt_banco_credito.text().strip()
+
+                # Validar que no esté vacío
+            if not banco_credito_val:
+                QMessageBox.warning(self, "Campo obligatorio",
+                                        "Debes ingresar el banco que concede el crédito.")
+                return  # Salimos de la función, no se guarda
             
             data_venta = {
                 'comprador': {
