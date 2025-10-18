@@ -467,36 +467,26 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             'no_expropiacion': data_venta['venta'].get('no_expropiacion', 'No Posee Documento')
         }
 
-        if es_venta_cerrada and  tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
+        if es_venta_cerrada and tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
 
-            abono_prev_texto = data_venta['venta'].get('abono_previsto')
+            abono_prev_texto = data_venta['venta'].get('abono_previsto', '0')
+            abono_real_texto = data_venta['venta'].get('abono_real', '0')
 
-            abono_real_texto = data_venta['venta'].get('abono_real')
+            try:
+                abono_previo = float(abono_prev_texto.replace(".", "").replace(",", "."))
+            except (ValueError, AttributeError):
+                abono_previo = 0.0
+
+            try:
+                abono_real = float(abono_real_texto.replace(".", "").replace(",", "."))
+            except (ValueError, AttributeError):
+                abono_real = 0.0
+
+            # Siempre insertar ambos valores, incluso si son 0
+            venta_data['abono_previsto'] = abono_previo
+            venta_data['abono_real'] = abono_real
+
             
-            try:
-                abono_previo = float(abono_prev_texto.replace(".", "").replace(",", ""))
-            except ValueError:
-                abono_previo = 0
-
-            try:
-                abono_real = float(abono_real_texto.replace(".", "").replace(",", ""))
-            except ValueError:
-                abono_real = 0
-           
-           
-            if abono_previo:
-                venta_data['abono_previsto'] = abono_previo
-
-            if abono_real:
-                venta_data['abono_real'] = abono_real
-
-            print("=== VALIDACIÓN DE ABONOS ===")
-            print("Abono previsto (texto):", abono_prev_texto)
-            print("Abono real (texto):", abono_real_texto)
-            print("Abono previsto (convertido):", abono_previo)
-            print("Abono real (convertido):", abono_real)
-            print("Campos en venta_data:", {k: v for k, v in venta_data.items() if 'abono' in k})
-            print("=============================")
 
             documentos_pas_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
@@ -518,6 +508,7 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
         vendedor_rut = data_venta['vendedor'].get('rut','').strip()
         if vendedor_rut:
             venta_data['vendedor_rut'] = vendedor_rut
+
 
         venta_existente_resp = supabase.table("venta").select("id").eq("tubo_id", tubo_id).execute()
         if venta_existente_resp.data:
