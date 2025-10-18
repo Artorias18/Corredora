@@ -63,6 +63,9 @@ class DetalleVentaWindow(QWidget):
         
         if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Credito H.","Credito H. + Subsidio"]:
             self.setup_tab_prea_cred()
+            
+        if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Credito H."]:
+            self.setup_tab_confe_cred()
 
             
         if self.detalle_venta.get('venta', {}).get('tipo_venta') in ["Subsidio", "Credito H. + Subsidio"]:
@@ -1161,8 +1164,7 @@ class FormularioVenta(QWidget):
         self.cmb_doc_tasacion.addItems(["Si Posee Documento", "No Posee Documento"])
         self.cmb_doc_dj_vend_no_habitual = QComboBox()
         self.cmb_doc_dj_vend_no_habitual.addItems(["Si Posee Documento", "No Posee Documento"])
-        self.cmb_estado_aprobacion = QComboBox()
-        self.cmb_estado_aprobacion.addItems(["En trámite","Aprobado","Rechazado"])
+        
         
 
 
@@ -1473,7 +1475,7 @@ class FormularioVenta(QWidget):
                 'subsidio_aprobado' : {
                     'monto_subsidio': self.txt_monto_subsidio.text(),
                     'porcentaje_subsidio': self.txt_porc_subsidio.text(),
-                    'resolucion_subsidio ': self.txt_resolucion_subsidio.toPlainText(),
+                    'resolucion_subsidio': self.txt_resolucion_subsidio.toPlainText(),
                     'estado_subsidio': self.cmb_estado_subsidio.currentText()
                 },
 
