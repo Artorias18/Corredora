@@ -685,3 +685,87 @@ def obtener_ventas_recientes(dias=7):
     except Exception as e:
         logger.error(f"Error al obtener ventas recientes: {str(e)}")
         return []
+    
+
+
+
+
+
+# ======================
+# FUNCIONES DE RRHH
+# ======================
+
+def guardar_trabajador(data):
+    try:
+        response = supabase.table("trabajador").upsert(data).execute()
+        print("🔹 Resultado guardar_trabajador:", response)
+        return response.data
+    except Exception as e:
+        print("Error al guardar trabajador:", e)
+        return None
+
+
+def obtener_trabajadores():
+    try:
+        response = supabase.table("trabajador").select("*").execute()
+        print("🔹 Resultado obtener_trabajadores:", response)
+        return response.data or []
+    except Exception as e:
+        print("Error al obtener trabajadores:", e)
+        return []
+
+from datetime import datetime
+
+def calcular_liquidacion(trabajador, dias_trabajados=30, horas_extras=0):
+    # Obtener mes actual en formato "Octubre 2025"
+    mes_liquidacion = datetime.now().strftime("%B %Y").capitalize()
+
+    sueldo_base = trabajador.get("sueldo_base", 0)
+    gratificacion = trabajador.get("gratificacion", sueldo_base / 4)
+    afp_porcentaje = trabajador.get("cotizacion_afp", 0.1144)
+    isapre_porcentaje = trabajador.get("cotizacion_isapre", 0.07)
+
+    total_imponible = sueldo_base + gratificacion
+    afp = round(total_imponible * afp_porcentaje)
+    isapre = round(total_imponible * isapre_porcentaje)
+    total_descuentos = afp + isapre
+
+    total_no_imponible = sum([
+        trabajador.get("asignacion_familiar") or 0,
+        trabajador.get("colacion") or 0,
+        trabajador.get("movilizacion") or 0,
+        trabajador.get("viatico") or 0
+    ])
+
+    total_haberes = total_imponible + total_no_imponible
+    liquido = total_haberes - total_descuentos
+
+    return {
+        "trabajador_rut": trabajador["rut"],
+        "mes_liquidacion": mes_liquidacion,
+        "dias_trabajados": dias_trabajados,
+        "horas_extras": horas_extras,
+        "sueldo_base": sueldo_base,
+        "gratificacion": gratificacion,
+        "total_haberes_imponibles": total_imponible,
+        "fondo_pensiones": afp,
+        "isapre_descuento": isapre,
+        "total_descuentos": total_descuentos,
+        "total_haberes_no_imponibles": total_no_imponible,
+        "total_haberes": total_haberes,
+        "liquido_pagar": liquido,
+    }
+
+
+def guardar_liquidacion(data):
+    try:
+        response = supabase.table("liquidacion_rrhh").insert(data).execute()
+        print("🔹 Resultado guardar_liquidacion:", response)
+        return response.data
+    except Exception as e:
+        print("Error al guardar liquidación:", e)
+        return None
+    
+
+
+    
