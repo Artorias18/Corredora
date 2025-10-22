@@ -307,12 +307,20 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
         if es_venta_cerrada and tipo_venta in ["Credito H.", "Credito H. + Subsidio"]:
 
+            monto_texto = data_venta['pre_aprobacion_credito']['monto_financiamiento']  # ejemplo: "40.000.000"
+
+            
+            try:
+                monto_limpio = float(monto_texto.replace(".", "").replace(",", ""))  # opcional eliminar comas si vienen
+            except ValueError:
+                monto_limpio = 0  # o manejar error de forma adecuada
+
             pre_aprobacion_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
                 'porcentaje_financiamiento': data_venta['pre_aprobacion_credito']['porcentaje_financiamiento'],
-                'monto_financiamiento': data_venta['pre_aprobacion_credito']['monto_financiamiento'],
+                'monto_financiamiento': monto_limpio,
                 'diferencias': data_venta['pre_aprobacion_credito'].get('diferencias',''),
-                'banco_credito': data_venta['pre_aprobacion_credito']['banco_credito'],
+                'banco_credito': data_venta['pre_aprobacion_credito']['banco_credito'].strip(),
                 'estado_preaprobacion':data_venta['pre_aprobacion_credito']['estado_preaprobacion']
             }
 
@@ -328,9 +336,18 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
         if es_venta_cerrada and tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
 
+            monto_subsidio_texto = data_venta['subsidio_aprobado']['monto_subsidio']
+
+            try:
+                monto_subsdio_limpio = float(monto_subsidio_texto.replace(".","").replace(",",""))
+
+            except ValueError:
+
+                monto_subsdio_limpio = 0
+
             subsidio_aprobado_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
-                'monto_subsidio': data_venta['subsidio_aprobado']['monto_subsidio'],
+                'monto_subsidio': monto_subsdio_limpio ,
                 'porcentaje_subsidio': data_venta['subsidio_aprobado']['porcentaje_subsidio'],
                 'resolucion_subsidio': data_venta['subsidio_aprobado'].get('resolucion_subsidio', ''),
                 'estado_subsidio': data_venta['subsidio_aprobado']['estado_subsidio']
@@ -426,11 +443,20 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             tubo_id = tubo_response.data[0]['id']
 
         # 7. Crear venta
+
+        monto_venta = data_venta['venta'].get('monto_venta', "")
+
+        try:
+            monto_venta_limpio = float(monto_venta.replace(".","").replace(",","")) if monto_venta else 0
+
+        except ValueError:
+            monto_venta_limpio = 0
+
         venta_data = {
             'codigo_interno': data_venta['propiedad']['codigo'],
             'tubo_id': tubo_id,
             'fecha_venta': data_venta['venta'].get('fecha_venta'),
-            'monto_venta': float(data_venta['venta'].get('monto_venta', 0)) if data_venta['venta'].get('monto_venta') else None,
+            'monto_venta': monto_venta_limpio,
             'observaciones': data_venta['venta'].get('observaciones', ''),
             'es_venta_proceso': not es_venta_cerrada,
             'inscripcion': data_venta['venta'].get('inscripcion', 'No Posee Documento'),
@@ -441,16 +467,26 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             'no_expropiacion': data_venta['venta'].get('no_expropiacion', 'No Posee Documento')
         }
 
-        if es_venta_cerrada and  tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
+        if es_venta_cerrada and tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
 
-            abono_previo = data_venta['venta'].get('abono_previsto')
-            abono_real = data_venta['venta'].get('abono_real')
+            abono_prev_texto = data_venta['venta'].get('abono_previsto', '0')
+            abono_real_texto = data_venta['venta'].get('abono_real', '0')
 
-            if abono_previo:
-                venta_data['abono_previsto'] = abono_previo
+            try:
+                abono_previo = float(abono_prev_texto.replace(".", "").replace(",", "."))
+            except (ValueError, AttributeError):
+                abono_previo = 0.0
 
-            if abono_real:
-                venta_data['abono_real'] = abono_real
+            try:
+                abono_real = float(abono_real_texto.replace(".", "").replace(",", "."))
+            except (ValueError, AttributeError):
+                abono_real = 0.0
+
+            # Siempre insertar ambos valores, incluso si son 0
+            venta_data['abono_previsto'] = abono_previo
+            venta_data['abono_real'] = abono_real
+
+            
 
             documentos_pas_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
@@ -472,6 +508,7 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
         vendedor_rut = data_venta['vendedor'].get('rut','').strip()
         if vendedor_rut:
             venta_data['vendedor_rut'] = vendedor_rut
+
 
         venta_existente_resp = supabase.table("venta").select("id").eq("tubo_id", tubo_id).execute()
         if venta_existente_resp.data:
