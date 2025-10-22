@@ -38,7 +38,7 @@ def obtener_ventas_resumen(filtro_estado=None):
 
 def obtener_detalle_venta(venta_id):
     try:
-        response = supabase.rpc("obtener_detalle_venta", {"venta_id": venta_id}).execute()
+        response = supabase.rpc("obtener_detalle_venta", {"p_venta_id": venta_id}).execute()
 
         data = response.data
 

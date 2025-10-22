@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuarlo_actual import UsuarioActual
 from services.supabase_client import supabase
+import json
 
 
 
@@ -195,9 +196,16 @@ class DetalleVentaWindow(QWidget):
         self.tabs.addTab(tab, "Posesión Efectiva")
         layout = QVBoxLayout(tab)
         
-        # Obtener herederos de la venta
-        herederos_response = supabase.table("herederos").select("*").eq("venta_id", self.venta_id).execute()
-        herederos = herederos_response.data if herederos_response.data else []
+        # Obtener herederos de la venta y la venta
+
+        herederos = self.detalle_venta.get('herederos', [])
+
+        if isinstance(herederos, str):
+            try:
+                herederos = json.loads(herederos)
+            except json.JSONDecodeError:
+                herederos = []
+             
         
         if not herederos:
             layout.addWidget(QLabel("No hay información de posesión efectiva disponible"))
