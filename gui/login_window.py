@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLab
 from PySide6.QtGui import QGuiApplication
 from gui.main_window import MainWindow
 from services.supabase_client import supabase
-from gui.usuarlo_actual import UsuarioActual
+from gui.usuario_actual import UsuarioActual
 
 class LoginWindow(QWidget):
 

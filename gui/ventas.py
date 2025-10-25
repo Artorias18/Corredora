@@ -1,14 +1,13 @@
 from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
+from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.database import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
+from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
 from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
-from gui.usuarlo_actual import UsuarioActual
+from gui.usuario_actual import UsuarioActual
 from services.supabase_client import supabase
-import json
 
 
 
@@ -34,7 +33,6 @@ class DetalleVentaWindow(QWidget):
         
         # Obtener datos de la venta
         self.detalle_venta = obtener_detalle_venta(venta_id)
-
         
         if not self.detalle_venta:
             layout_contenido.addWidget(QLabel("No se encontraron detalles para esta venta"))
@@ -82,33 +80,6 @@ class DetalleVentaWindow(QWidget):
         btn_cerrar = QPushButton("Cerrar")
         btn_cerrar.clicked.connect(self.close)
         layout_contenido.addWidget(btn_cerrar)
-        
-        self.btn_editar = QPushButton("Editar Venta")
-        self.btn_editar.clicked.connect(self.abrir_formulario_edicion)
-        layout_contenido.addWidget(self.btn_editar)
-
-    def abrir_formulario_edicion(self):
-        try:
-            # Traer venta
-            venta = self.detalle_venta.get('venta', {})
-
-            if venta:
-                es_venta_proceso = venta.get('es_venta_proceso', False)
-            else:
-                es_venta_proceso = False
-
-            # Crea una instancia del formulario
-            self.formulario = FormularioVenta(en_proceso=es_venta_proceso, venta_id=self.venta_id)
-            
-            
-            # Llamas a la función que carga los datos en el formulario
-            self.formulario.cargar_datos_venta(venta_id=self.venta_id)
-
-            # Muestras la ventana
-            self.formulario.show()
-
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"No se pudo abrir el formulario: {e}")
     
     def setup_tab_info_general(self):
         tab = QWidget()
@@ -239,32 +210,17 @@ class DetalleVentaWindow(QWidget):
         self.tabs.addTab(tab, "Posesión Efectiva")
         layout = QVBoxLayout(tab)
         
-        # Obtener herederos de la venta y la venta
-
-        herederos = self.detalle_venta.get('herederos', [])
-
-        if isinstance(herederos, str):
-            try:
-                herederos = json.loads(herederos)
-            except json.JSONDecodeError:
-                herederos = []
-
-        # Si es un solo dict (un solo heredero), lo ponemos en una lista
-        if isinstance(herederos, dict):
-            herederos = [herederos]
-
-        # Si no es lista después de esto, forzamos una lista vacía
-        if not isinstance(herederos, list):
-            herederos = []
-
-             
+        # Obtener herederos de la venta
+        herederos_response = supabase.table("herederos").select("*").eq("venta_id", self.venta_id).execute()
+        herederos = herederos_response.data if herederos_response.data else []
         
         if not herederos:
             layout.addWidget(QLabel("No hay información de posesión efectiva disponible"))
             return
         
         # Información de posesión efectiva
-        posesion = self.detalle_venta.get('posesion', {})
+        posesion_response = supabase.table("posesion_efectiva").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        posesion = posesion_response.data[0] if posesion_response.data else {}
         
         if posesion:
             form_pos = QFormLayout()
@@ -299,18 +255,23 @@ class DetalleVentaWindow(QWidget):
         self.tabs.addTab(tab, "Tasador")
         layout = QFormLayout(tab)
 
-        tasacion = self.detalle_venta.get('tasacion', {})
+        tasador_response = supabase.table("tasador").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        docs_tas_response = supabase.table("documentos_tasacion").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
 
-        if tasacion:
+        docs_tas = docs_tas_response.data[0] if docs_tas_response.data else {}
+
+
+        tasador = tasador_response.data[0]
+
+        if tasador:
             layout.addRow(QLabel("<b>Información Tasador:</b>"), QLabel(""))
 
             # Campos básicos del tasador
             campos_tas = [
-                ("Nombre", tasacion.get('nombre', '')),
-                ("Rut", tasacion.get('rut', '')),
-                ("Teléfono", tasacion.get('telefono', '')),
-                ("Email", tasacion.get('correo_electronico', '')),
-                
+                ("Nombre", tasador.get('nombre', '')),
+                ("Rut", tasador.get('rut', '')),
+                ("Teléfono", tasador.get('telefono', '')),
+                ("Email", tasador.get('correo_electronico', ''))
             ]
 
             for label, value in campos_tas:
@@ -319,15 +280,15 @@ class DetalleVentaWindow(QWidget):
             # 👇 Ahora recién agregamos el encabezado de documentación
             layout.addRow(QLabel("<b>Documentación:</b>"), QLabel(""))
 
-            campos_docs = [
-                    ("Documento Propiedad", tasacion.get('doc_propiedad', '')),
-                    ("Copia Subsidio", tasacion.get('copia_subsidio', '')),
-                    ("Informe de Tasación", tasacion.get('informe_tasacion', '')),
-                    ("Certificado Habitabilidad", tasacion.get('certif_habitabilidad', ''))
+            if docs_tas:
+                campos_docs = [
+                    ("Documento Propiedad", docs_tas.get('doc_propiedad', '')),
+                    ("Copia Subsidio", docs_tas.get('copia_subsidio', '')),
+                    ("Informe de Tasación", docs_tas.get('informe_tasacion', '')),
+                    ("Certificado Habitabilidad", docs_tas.get('certif_habitabilidad', ''))
                 ]
-            
-            for label, value in campos_docs:
-                layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
+                for label, value in campos_docs:
+                    layout.addRow(QLabel(f"{label}:"), QLabel(str(value)))
                 
 
     def setup_tab_prea_sub(self):
@@ -335,7 +296,9 @@ class DetalleVentaWindow(QWidget):
         self.tabs.addTab(tab, "Preaprobación Subsidio")
         layout = QFormLayout(tab)
 
-        subsidio = self.detalle_venta.get('subsidio', {})
+        subsidio_response = supabase.table("subsidio_aprobado").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        
+        subsidio = subsidio_response.data[0]
 
         if subsidio:
             layout.addRow(QLabel("<b>Preaprobación de Subsidio:</b>"), QLabel(""))
@@ -365,8 +328,9 @@ class DetalleVentaWindow(QWidget):
         tab = QWidget()
         self.tabs.addTab(tab, "Confección")
         layout = QFormLayout(tab)
-        
-        confeccion = self.detalle_venta.get('confeccion', {})
+        confe_response = supabase.table("documentos_escritura").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        confeccion = confe_response.data[0] if confe_response.data else {}
         venta = self.detalle_venta.get('venta', {})
 
         if confeccion:
@@ -400,8 +364,9 @@ class DetalleVentaWindow(QWidget):
         tab = QWidget()
         self.tabs.addTab(tab, "Documentos PAS")
         layout = QFormLayout(tab)
-
-        pas = self.detalle_venta.get('PAS', {})
+        docs_pas_response = supabase.table("documentos_pas").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+        
+        pas = docs_pas_response.data[0] if docs_pas_response.data else {}
 
         if pas:
             layout.addRow(QLabel("<b>Documentos PAS:</b>"), QLabel(""))
@@ -426,7 +391,9 @@ class DetalleVentaWindow(QWidget):
         tab = QWidget()
         self.tabs.addTab(tab, "Preaprobación Credito")
         layout = QFormLayout(tab)
-        credito = self.detalle_venta.get('aproba_cred', {})
+        prea_cred_response = supabase.table("pre_aprobacion_credito").select("*").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        credito = prea_cred_response.data[0] if prea_cred_response.data else {}
 
         if credito:
             campos_credito = [
@@ -452,8 +419,9 @@ class DetalleVentaWindow(QWidget):
         tab = QWidget()
         self.tabs.addTab(tab, "Confección")
         layout = QFormLayout(tab)
-        confe_cred = self.detalle_venta.get('confeccion', {})
-        
+        confe_cred_response = supabase.table("documentos_escritura").select("doc_propiedad, doc_tasacion, dj_vend_no_habitual").eq("codigo_interno", self.detalle_venta['propiedad']['codigo_interno']).execute()
+
+        confe_cred = confe_cred_response.data[0] if confe_cred_response else {}
 
         if confe_cred:
             campos_cred = [
@@ -708,7 +676,6 @@ class FormularioVenta(QWidget):
         self.venta_id = venta_id
         self.setWindowTitle("Editar Venta" if venta_id else "Nueva Venta en Proceso" if en_proceso else "Nueva Venta Cerrada")
         self.resize(900, 700)
-        self.detalle_venta = {}
         
         # Layout principal con scroll
         layout_principal = QVBoxLayout(self)
@@ -821,11 +788,7 @@ class FormularioVenta(QWidget):
         """)
 
         if self.venta_id:
-            self.detalle_venta = obtener_detalle_venta(self.venta_id)
-            if not self.detalle_venta:
-                layout_principal.addWidget(QLabel("No se encontraron detalles para esta venta"))
-            else:
-                self.cargar_datos_venta(self.venta_id)
+            self.cargar_datos_venta(self.venta_id)
         
         # Tipo de venta
     def setup_tab_basica(self, tab):
@@ -840,6 +803,7 @@ class FormularioVenta(QWidget):
             "Credito H.", 
             "Credito H. + Subsidio"
         ])
+        self.cmb_tipo_venta.setVisible(not self.en_proceso)
         
         # Cambiar el nombre de la señal conectada para mayor claridad
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
@@ -894,8 +858,8 @@ class FormularioVenta(QWidget):
         self.cmb_regularizaciones.addItems(["Si", "No"])
         
         # Agregar campos al layout 
-        
-        layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
+        if not self.en_proceso:
+            layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
         
         if not self.en_proceso:
             layout.addRow(self.crear_label("Estado:", True), self.cmb_estado)
@@ -1737,29 +1701,37 @@ class FormularioVenta(QWidget):
     def cargar_datos_venta(self, venta_id):
         try:
             # Obtener la venta
-            
-            venta = self.detalle_venta.get('venta', {})
-            
-    
+            venta_resp = supabase.table("venta").select("*").eq("id", venta_id).execute()
+            if not venta_resp.data:
+                QMessageBox.warning(self, "Error", "No se encontraron datos de la venta.")
+                return
+            venta = venta_resp.data[0]
+
             self.date_fecha.setDate(QDate.fromString(venta.get("fecha_venta", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
-            self.txt_monto.setText(f"{(int(venta.get('monto_venta', 0))):,}")
+            self.txt_monto.setText(str(venta.get("monto_venta", "")))
             self.txt_observaciones.setPlainText(venta.get("observaciones", ""))
 
+            
+            # Obtener el tubo
+            tubo_id = venta.get("tubo_id")
+            tubo_resp = supabase.table("tubo").select("*").eq("id", tubo_id).execute()
+            if tubo_resp.data:
+                tubo = tubo_resp.data[0]
+                self.txt_prop_codigo.setText(tubo.get("codigo_interno", ""))
+                self.cmb_tipo_venta.setCurrentText(tubo.get("tipo_venta", ""))
+                self.cmb_estado.setCurrentText(tubo.get("estado_venta", ""))
+                self.cmb_prop_ofrecida.setCurrentText(tubo.get("propiedad_ofrecida", "No"))
+                self.cmb_regularizaciones.setCurrentText(tubo.get("regularizaciones_ampliaciones", "No"))
 
-            self.cmb_tipo_venta.setCurrentText(venta.get("tipo_venta", ""))
-            self.cmb_estado.setCurrentText(venta.get("estado_venta", ""))
-            self.cmb_prop_ofrecida.setCurrentText(venta.get("propiedad_ofrecida", "No"))
-            self.cmb_regularizaciones.setCurrentText(venta.get("regularizaciones_ampliaciones", "No"))
-
-            tipo_venta = venta.get("tipo_venta", "")
-            self.cmb_tipo_venta.setCurrentText(tipo_venta)
+            tipo_venta = self.cmb_tipo_venta.setCurrentText()
                         
 
             # Obtener comprador
             rut_comp = venta.get("comprador_rut")
             if rut_comp:
-                comp = self.detalle_venta.get('comprador', {})
-                if comp:
+                comp_resp = supabase.table("comprador").select("*").eq("rut", rut_comp).execute()
+                if comp_resp.data:
+                    comp = comp_resp.data[0]
                     self.txt_comp_nombre.setText(comp.get("nombre", ""))
                     self.txt_comp_rut.setText(comp.get("rut", ""))
                     self.txt_comp_direccion.setText(comp.get("direccion", ""))
@@ -1774,9 +1746,9 @@ class FormularioVenta(QWidget):
             # Obtener vendedor
             rut_vend = venta.get("vendedor_rut")
             if rut_vend:
-                vend = self.detalle_venta.get('vendedor', {})
-                if vend:
-                    
+                vend_resp = supabase.table("vendedor").select("*").eq("rut", rut_vend).execute()
+                if vend_resp.data:
+                    vend = vend_resp.data[0]
                     self.txt_vend_nombre.setText(vend.get("nombre", ""))
                     self.txt_vend_rut.setText(vend.get("rut", ""))
                     self.txt_vend_direccion.setText(vend.get("direccion", ""))
@@ -1789,16 +1761,18 @@ class FormularioVenta(QWidget):
 
 
             # Obtener la propiedad
-            propiedad = self.detalle_venta.get('propiedad', {})
+            codigo = tubo.get("codigo_interno")
+            propiedad_resp = supabase.table("propiedad").select("*").eq("codigo_interno", codigo).execute()
             
-            if propiedad:
-                self.txt_prop_codigo.setText(propiedad.get("codigo_interno", ""))
-                self.txt_prop_direccion.setText(propiedad.get("direccion", ""))
-                self.txt_prop_rol.setText(str(propiedad.get("rol", "")))
-                self.txt_prop_comuna.setText(propiedad.get("comuna", ""))
-                self.cmb_estudio_titulos.setCurrentText(propiedad.get("estudio_titulos", "No Posee Documento"))
+            if propiedad_resp.data:
+                prop = propiedad_resp.data[0]
+                self.txt_prop_codigo.setText(prop.get("codigo_interno", ""))
+                self.txt_prop_direccion.setText(prop.get("direccion", ""))
+                self.txt_prop_rol.setText(str(prop.get("rol", "")))
+                self.txt_prop_comuna.setText(prop.get("comuna", ""))
+                self.cmb_estudio_titulos.setCurrentText(prop.get("estudio_titulos", "No Posee Documento"))
                 self.cmb_inscripcion.setCurrentText(venta.get("inscripcion", "No Posee Documento"))
-                self.cmb_dominio_vigente.setCurrentText(propiedad.get("dominio_vigente","No Posee Documento"))
+                self.cmb_dominio_vigente.setCurrentText(prop.get("dominio_vigente","No Posee Documento"))
                 self.cmb_hipoteca.setCurrentText(venta.get("hipoteca","No Posee Documento"))
                 self.cmb_gravamen.setCurrentText(venta.get("gravamen","No Posee Documento"))
                 self.cmb_certificado_numero.setCurrentText(venta.get("certificado_numero","No Posee Documento"))
@@ -1807,35 +1781,22 @@ class FormularioVenta(QWidget):
             
             if tipo_venta == "Posesion Efectiva":
                 # Obtener posesion efectiva
-                posesion = self.detalle_venta.get('posesion', {})
-                if posesion:
-                
-                    self.cmb_tipo_pos.setCurrentText(posesion.get("tipo_posesion"))
-                    self.cmb_canal.setCurrentText(posesion.get("canal"))
-                    self.cmb_estado_proceso.setCurrentText(posesion.get("estado_proceso"))
-                    self.txt_obs_pos.setPlainText(posesion.get("observaciones", ""))
+                posesion_resp = supabase.table("posesion_efectiva").select("*").eq("codigo_interno", codigo).execute()
+                if posesion_resp.data:
+                    pos = posesion_resp.data[0]
+
+                    self.cmb_tipo_pos.setCurrentText(pos.get("tipo_posesion"))
+                    self.cmb_canal.setCurrentText(pos.get("canal"))
+                    self.cmb_estado_proceso.setCurrentText(pos.get("estado_proceso"))
+                    self.txt_obs_pos.setPlainText(pos.get("observaciones", ""))
                 
                 # Obtener herederos
-                herederos = self.detalle_venta.get('herederos', [])
-                if isinstance(herederos, str):
-                    try:
-                        herederos = json.loads(herederos)
-                    except json.JSONDecodeError:
-                        herederos = []
-
-                # Si es un solo dict (un solo heredero), lo ponemos en una lista
-                if isinstance(herederos, dict):
-                    herederos = [herederos]
-
-                # Si no es lista después de esto, forzamos una lista vacía
-                if not isinstance(herederos, list):
-                    herederos = []
-
+                herederos_resp = supabase.table("herederos").select("*").eq("codigo_interno", codigo).execute()
                 
-                
-                if herederos:
+                if herederos_resp.data:
                     self.tabla_herederos.setRowCount(0)
-                    for idx, heredero in enumerate(herederos):
+                    
+                    for idx, heredero in enumerate(herederos_resp.data):
                         self.tabla_herederos.insertRow(idx)
                         self.tabla_herederos.setItem(idx, 0, QTableWidgetItem(heredero.get("nombre", "")))
                         self.tabla_herederos.setItem(idx, 1, QTableWidgetItem(heredero.get("rut", "")))
@@ -1850,9 +1811,10 @@ class FormularioVenta(QWidget):
             
             if tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
                 # Obtener recepcion definitiva
-                recep = self.detalle_venta.get('documentacion', {})
-                if recep:
-                    
+                recepcion_resp = supabase.table("recepcion_definitiva").select("*").eq("codigo_interno", codigo).execute()
+                if recepcion_resp.data:
+                    recep = recepcion_resp.data[0]
+            
                     self.cmb_superficie.setCurrentText(recep.get("superficie","No Posee Documento"))
                     self.cmb_edificada.setCurrentText(recep.get("edificada","No Posee Documento"))
                     self.cmb_recepcion.setCurrentText(recep.get("recepcion","No Posee Documento"))
@@ -1861,10 +1823,11 @@ class FormularioVenta(QWidget):
             
                 # Obtener Tasador en caso de venta con "Subsidio", "Credito H.", "Credito H. + Subsidio"
 
-                tas = self.detalle_venta.get('tasacion', {})
+                tasador_resp = supabase.table("tasador").select("*").eq("codigo_interno", codigo).execute()
 
-                if tas:
-                    
+                if tasador_resp.data:
+                    tas = recepcion_resp.data[0]
+
                     self.txt_tas_nombre.setText(tas.get("nombre",""))
                     self.txt_tas_rut.setText(tas.get("rut",""))
                     self.txt_tas_telefono.setText(tas.get("telefono",""))
@@ -1872,11 +1835,16 @@ class FormularioVenta(QWidget):
 
                 # Obtener documentos tasacion
 
+                tasacion_docs_resp = supabase.table("documentos_tasacion").select("*").eq("codigo_interno", codigo).execute()
 
-                    self.cmb_doc_propiedad_tas.setCurrentText(tas.get("doc_propiedad","No Posee Documento"))
-                    self.cmb_copia_subsidio.setCurrentText(tas.get("copia_subsidio","No Posee Documento"))
-                    self.cmb_informe_tasacion.setCurrentText(tas.get("informe_tasacion ","No Posee Documento"))
-                    self.cmb_certif_habitabilidad.setCurrentText(tas.get("certif_habitabilidad","No Posee Documento"))
+                if tasacion_docs_resp.data:
+
+                    tas_docs = tasacion_docs_resp.data[0]
+
+                    self.cmb_doc_propiedad_tas.setCurrentText(tas_docs.get("doc_propiedad","No Posee Documento"))
+                    self.cmb_copia_subsidio.setCurrentText(tas_docs.get("copia_subsidio","No Posee Documento"))
+                    self.cmb_informe_tasacion.setCurrentText(tas_docs.get("informe_tasacion ","No Posee Documento"))
+                    self.cmb_certif_habitabilidad.setCurrentText(tas_docs.get("certif_habitabilidad","No Posee Documento"))
                     
 
                 
@@ -1885,33 +1853,24 @@ class FormularioVenta(QWidget):
 
                 # Obtener pre aprobacion credito
 
-                prea = self.detalle_venta.get('subsidio', {})
-                print(prea)
+                prea_cred_resp = supabase.table("subsidio_aprobado").select("*").eq("codigo_interno", codigo).execute()
 
-                if prea:
+                if prea_cred_resp.data:
+
+                    prea = prea_cred_resp.data[0]
                     
-                    prea_cred_json = venta.get("aproba_cred")
-                    prea_cred = json.loads(prea_cred_json) if prea_cred_json else {}
-                    
-
-                    porcentaje_finan_sub = prea.get("porcentaje_subsidio")
-
-                    if porcentaje_finan_sub is not None:
-                        porcentaje_finan_sub_str = f"{porcentaje_finan_sub * 100}"
-                    else:
-                        porcentaje_finan__sub_str = ""
-
-                    
-                    self.txt_porc_subsidio.setText(porcentaje_finan_sub_str)
-                    self.txt_monto_subsidio.setText(f"{(int(prea.get('monto_subsidio', 0))):,}")
+                    self.txt_porc_subsidio.setText(str(prea.get("porcentaje_subsidio", "")))
+                    self.txt_monto_subsidio.setText(str(prea.get("monto_subsidio", "")))
                     self.cmb_estado_subsidio.setCurrentText(prea.get("estado_subsidio", "Sin definir"))
                     self.txt_resolucion_subsidio.setPlainText(prea.get("resolucion_subsidio", ""))
 
                 # Obtener confeccion escritura
 
-                confe_sub  = self.detalle_venta.get('confeccion', {})
+                confeccion_sub_resp = supabase.table("documentos_escritura").select("*").eq("codigo_interno", codigo).execute()
 
-                if confe_sub:
+                if confeccion_sub_resp.data:
+
+                    confe_sub = confeccion_sub_resp.data[0]
 
                     self.cmb_doc_propiedad_confe.setCurrentText(confe_sub.get("doc_propiedad","No Posee Documento"))
                     self.cmb_doc_tasacion.setCurrentText(confe_sub.get("doc_tasacion","No Posee Documento"))
@@ -1920,14 +1879,16 @@ class FormularioVenta(QWidget):
                     self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_sub.get("dj_vend_no_habitual","No Posee Documento"))
                     self.cmb_doc_dj_comp_no_parientes_cargos_publicos.setCurrentText(confe_sub.get("dj_comp_no_parientes_cargos_publicos","No Posee Documento"))
 
-                    self.txt_abono_previo.setText(f"{(int(venta.get('abono_previsto', 0))):,}")
-                    self.txt_abono_real.setText(f"{(int(venta.get('abono_real', 0))):,}")
+                    self.txt_abono_previo.setText(str(venta.get("abono_previsto", "")))
+                    self.txt_abono_real.setText(str(venta.get("abono_real", "")))
                 
                 # Obtener docs pas
 
-                doc_pas = self.detalle_venta.get('PAS', {})
+                docs_pas_resp = supabase.table("documentos_pas").select("*").eq("codigo_interno", codigo).execute()
 
-                if doc_pas:
+                if docs_pas_resp.data:
+
+                    doc_pas = docs_pas_resp.data[0]
 
                     self.fecha_ingreso_documentos.setDate(QDate.fromString(doc_pas.get("fecha_ingreso_docs", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
                     self.cmb_supe_platas.setCurrentText(doc_pas.get("supe_platas"))
@@ -1940,22 +1901,14 @@ class FormularioVenta(QWidget):
                 
                 # Obtener pre aprobacion de credito
 
-                prea_cred = self.detalle_venta.get('aproba_cred', {})
+                prea_cred_resp = supabase.table("pre_aprobacion_credito").select("*").eq("codigo_interno",codigo).execute()
 
-                if prea_cred:
+                if prea_cred_resp.data:
 
-                    porcentaje_finan_cred = prea_cred.get("porcentaje_financiamiento")
+                    prea_cred = prea_cred_resp.data[0]
 
-                    if porcentaje_finan_cred is not None:
-
-                        porcentaje_finan_cred_str = f"{porcentaje_finan_cred * 100}"
-                    else:
-                        porcentaje_finan_cred_str = ""
-
-                    
-
-                    self.txt_porc_financiamiento.setText(porcentaje_finan_cred_str)
-                    self.txt_monto_financiamiento.setText(f"{(int(prea_cred.get('monto_financiamiento', 0))):,}")
+                    self.txt_porc_financiamiento.setText(str(prea_cred.get("porcentaje_financiamiento","")))
+                    self.txt_monto_financiamiento.setText(str(prea_cred.get("monto_financiamiento","")))
                     self.txt_banco_credito.setText(prea_cred.get("banco_credito",""))
                     self.cmb_estado_aprobacion.setCurrentText(prea_cred.get("estado_preaprobacion"))
                     self.txt_diferencias_prea_credito.setPlainText("diferencias","")
@@ -1963,9 +1916,12 @@ class FormularioVenta(QWidget):
 
                 # Obtener confección credito
 
-                confe_cred = self.detalle_venta.get('confeccion', {})
+                confe_cred_resp = supabase.table("documentos_escritura").select("doc_propiedad, doc_tasacion, dj_vend_no_habitual").eq("codigo_interno", codigo).execute()
 
-                if confe_cred:
+                if confe_cred_resp.data:
+
+                    confe_cred = confe_cred_resp.data[0]
+
                     self.cmb_doc_propiedad_confe.setCurrentText(confe_cred.get("doc_propiedad","No Posee Documento"))
                     self.cmb_doc_tasacion.setCurrentText(confe_cred.get("doc_tasacion","No Posee Documento"))
                     self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_cred.get("dj_vend_no_habitual","No Posee Documento"))

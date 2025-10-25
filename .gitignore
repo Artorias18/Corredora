@@ -1,8 +1,12 @@
 # Ignorar entorno virtual
-.venv/
-venv/
-env/
+.venv
+venv
+env
+.env
+
 Lib/
 Scripts/
 services/supabase_client.py
 __pycache__/
+
+test_rrhh.py
