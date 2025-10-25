@@ -89,14 +89,20 @@ class DetalleVentaWindow(QWidget):
 
     def abrir_formulario_edicion(self):
         try:
+            # Traer venta
+            venta = self.detalle_venta.get('venta', {})
+
+            if venta:
+                es_venta_proceso = venta.get('es_venta_proceso', False)
+            else:
+                es_venta_proceso = False
+
             # Crea una instancia del formulario
-            self.formulario = FormularioVenta(self.venta_id)
+            self.formulario = FormularioVenta(en_proceso=es_venta_proceso, venta_id=self.venta_id)
             
-            # Le pasas los datos que ya tienes (detalle_venta)
-            self.formulario.detalle_venta = self.detalle_venta
             
             # Llamas a la función que carga los datos en el formulario
-            self.formulario.cargar_datos_venta(self.venta_id)
+            self.formulario.cargar_datos_venta(venta_id=self.venta_id)
 
             # Muestras la ventana
             self.formulario.show()
@@ -819,7 +825,7 @@ class FormularioVenta(QWidget):
             if not self.detalle_venta:
                 layout_principal.addWidget(QLabel("No se encontraron detalles para esta venta"))
             else:
-                self.cargar_datos_venta()
+                self.cargar_datos_venta(self.venta_id)
         
         # Tipo de venta
     def setup_tab_basica(self, tab):
@@ -834,7 +840,6 @@ class FormularioVenta(QWidget):
             "Credito H.", 
             "Credito H. + Subsidio"
         ])
-        self.cmb_tipo_venta.setVisible(not self.en_proceso)
         
         # Cambiar el nombre de la señal conectada para mayor claridad
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
@@ -889,8 +894,8 @@ class FormularioVenta(QWidget):
         self.cmb_regularizaciones.addItems(["Si", "No"])
         
         # Agregar campos al layout 
-        if not self.en_proceso:
-            layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
+        
+        layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
         
         if not self.en_proceso:
             layout.addRow(self.crear_label("Estado:", True), self.cmb_estado)
@@ -1735,9 +1740,9 @@ class FormularioVenta(QWidget):
             
             venta = self.detalle_venta.get('venta', {})
             
-
+    
             self.date_fecha.setDate(QDate.fromString(venta.get("fecha_venta", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
-            self.txt_monto.setText(str(venta.get("monto_venta", "")))
+            self.txt_monto.setText(f"{(int(venta.get('monto_venta', 0))):,}")
             self.txt_observaciones.setPlainText(venta.get("observaciones", ""))
 
 
@@ -1812,6 +1817,21 @@ class FormularioVenta(QWidget):
                 
                 # Obtener herederos
                 herederos = self.detalle_venta.get('herederos', [])
+                if isinstance(herederos, str):
+                    try:
+                        herederos = json.loads(herederos)
+                    except json.JSONDecodeError:
+                        herederos = []
+
+                # Si es un solo dict (un solo heredero), lo ponemos en una lista
+                if isinstance(herederos, dict):
+                    herederos = [herederos]
+
+                # Si no es lista después de esto, forzamos una lista vacía
+                if not isinstance(herederos, list):
+                    herederos = []
+
+                
                 
                 if herederos:
                     self.tabla_herederos.setRowCount(0)
@@ -1866,11 +1886,24 @@ class FormularioVenta(QWidget):
                 # Obtener pre aprobacion credito
 
                 prea = self.detalle_venta.get('subsidio', {})
+                print(prea)
 
                 if prea:
                     
-                    self.txt_porc_subsidio.setText(str(prea.get("porcentaje_subsidio", "")))
-                    self.txt_monto_subsidio.setText(str(prea.get("monto_subsidio", "")))
+                    prea_cred_json = venta.get("aproba_cred")
+                    prea_cred = json.loads(prea_cred_json) if prea_cred_json else {}
+                    
+
+                    porcentaje_finan_sub = prea.get("porcentaje_subsidio")
+
+                    if porcentaje_finan_sub is not None:
+                        porcentaje_finan_sub_str = f"{porcentaje_finan_sub * 100}"
+                    else:
+                        porcentaje_finan__sub_str = ""
+
+                    
+                    self.txt_porc_subsidio.setText(porcentaje_finan_sub_str)
+                    self.txt_monto_subsidio.setText(f"{(int(prea.get('monto_subsidio', 0))):,}")
                     self.cmb_estado_subsidio.setCurrentText(prea.get("estado_subsidio", "Sin definir"))
                     self.txt_resolucion_subsidio.setPlainText(prea.get("resolucion_subsidio", ""))
 
@@ -1887,8 +1920,8 @@ class FormularioVenta(QWidget):
                     self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_sub.get("dj_vend_no_habitual","No Posee Documento"))
                     self.cmb_doc_dj_comp_no_parientes_cargos_publicos.setCurrentText(confe_sub.get("dj_comp_no_parientes_cargos_publicos","No Posee Documento"))
 
-                    self.txt_abono_previo.setText(str(venta.get("abono_previsto", "")))
-                    self.txt_abono_real.setText(str(venta.get("abono_real", "")))
+                    self.txt_abono_previo.setText(f"{(int(venta.get('abono_previsto', 0))):,}")
+                    self.txt_abono_real.setText(f"{(int(venta.get('abono_real', 0))):,}")
                 
                 # Obtener docs pas
 
@@ -1911,8 +1944,18 @@ class FormularioVenta(QWidget):
 
                 if prea_cred:
 
-                    self.txt_porc_financiamiento.setText(str(prea_cred.get("porcentaje_financiamiento","")))
-                    self.txt_monto_financiamiento.setText(str(prea_cred.get("monto_financiamiento","")))
+                    porcentaje_finan_cred = prea_cred.get("porcentaje_financiamiento")
+
+                    if porcentaje_finan_cred is not None:
+
+                        porcentaje_finan_cred_str = f"{porcentaje_finan_cred * 100}"
+                    else:
+                        porcentaje_finan_cred_str = ""
+
+                    
+
+                    self.txt_porc_financiamiento.setText(porcentaje_finan_cred_str)
+                    self.txt_monto_financiamiento.setText(f"{(int(prea_cred.get('monto_financiamiento', 0))):,}")
                     self.txt_banco_credito.setText(prea_cred.get("banco_credito",""))
                     self.cmb_estado_aprobacion.setCurrentText(prea_cred.get("estado_preaprobacion"))
                     self.txt_diferencias_prea_credito.setPlainText("diferencias","")
@@ -1923,7 +1966,6 @@ class FormularioVenta(QWidget):
                 confe_cred = self.detalle_venta.get('confeccion', {})
 
                 if confe_cred:
-
                     self.cmb_doc_propiedad_confe.setCurrentText(confe_cred.get("doc_propiedad","No Posee Documento"))
                     self.cmb_doc_tasacion.setCurrentText(confe_cred.get("doc_tasacion","No Posee Documento"))
                     self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_cred.get("dj_vend_no_habitual","No Posee Documento"))
