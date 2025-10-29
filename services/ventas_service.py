@@ -544,7 +544,7 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             posesion_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
                 'tipo_posesion': data_posesion.get('tipo', 'intestada'),
-                'canal': data_posesion.get('canal', 'registro civil'),
+                'canal': data_posesion.get('canal', 'Registro Civil'),
                 'estado_proceso': data_posesion.get('estado_proceso', 'solicitud'),
                 'observaciones': data_posesion.get('observaciones', '')
             }

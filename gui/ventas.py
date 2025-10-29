@@ -146,7 +146,7 @@ class DetalleVentaWindow(QWidget):
             ("RUT", comprador.get('rut')),
             ("Dirección", comprador.get('direccion')),
             ("Teléfono", comprador.get('telefono')),
-            ("Email", comprador.get('correo_electronico')),
+            ("Email", comprador.get('correo')),
             ("Banco", comprador.get('banco')),
             ("Tipo de cuenta", comprador.get('tipo_cuenta')),
             ("Número de cuenta", comprador.get('nro_cuenta')),
@@ -170,13 +170,15 @@ class DetalleVentaWindow(QWidget):
             ("RUT", vendedor.get('rut')),
             ("Dirección", vendedor.get('direccion')),
             ("Teléfono", vendedor.get('telefono')),
-            ("Email", vendedor.get('correo_electronico')),
+            ("Email", vendedor.get('correo')),
             ("Banco", vendedor.get('banco')),
             ("Tipo de cuenta", vendedor.get('tipo_cuenta')),
             ("Número de cuenta", vendedor.get('nro_cuenta')),
             ("Poder judicial", vendedor.get('poder_judicial')),
             ("Posesión efectiva", vendedor.get('posesion_efectiva'))
         ]
+
+        print(vendedor.get('correo'))
         
         for label, value in campos:
             if value:
@@ -269,10 +271,17 @@ class DetalleVentaWindow(QWidget):
         if posesion:
             form_pos = QFormLayout()
             campos_pos = [
-                ("Tipo", posesion.get('tipo_posesion', '').capitalize()),
-                ("Canal", posesion.get('canal', '').capitalize()),
-                ("Estado del proceso", posesion.get('estado_proceso', '').capitalize())
+                ("Tipo", posesion.get('tipo_posesion', '')),
+                ("Canal", posesion.get('canal', '')),
+                ("Estado del proceso", posesion.get('estado_proceso', ''))
             ]
+
+            observaciones = posesion.get('observaciones')
+
+            if observaciones:
+                campos_pos.extend([
+                    ("Observaciones", observaciones)
+                ])
             
             for label, value in campos_pos:
                 form_pos.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
@@ -545,11 +554,9 @@ class DashboardVentas(QMainWindow):
         
         # Barra de botones
         button_layout = QHBoxLayout()
+
         
-        self.btn_agregar_proceso = QPushButton("Nueva Venta en Proceso")
-        self.btn_agregar_proceso.clicked.connect(lambda: self.abrir_formulario_venta(en_proceso=True))
-        
-        self.btn_agregar_cerrada = QPushButton("Nueva Venta Cerrada")
+        self.btn_agregar_cerrada = QPushButton("Agregar Venta")
         self.btn_agregar_cerrada.clicked.connect(lambda: self.abrir_formulario_venta(en_proceso=False))
         
         self.btn_actualizar = QPushButton("Actualizar Lista")
@@ -560,7 +567,7 @@ class DashboardVentas(QMainWindow):
         
  
         
-        button_layout.addWidget(self.btn_agregar_proceso)
+       
         button_layout.addWidget(self.btn_agregar_cerrada)
         button_layout.addWidget(self.btn_actualizar)
         button_layout.addWidget(self.btn_exportar)
@@ -702,11 +709,11 @@ class DashboardVentas(QMainWindow):
 class FormularioVenta(QWidget):
     venta_guardada = Signal()
     
-    def __init__(self, en_proceso=False,venta_id=None, parent=None):
+    def __init__(self,en_proceso=False,venta_id=None, parent=None):
         super().__init__(parent)
         self.en_proceso = en_proceso
         self.venta_id = venta_id
-        self.setWindowTitle("Editar Venta" if venta_id else "Nueva Venta en Proceso" if en_proceso else "Nueva Venta Cerrada")
+        self.setWindowTitle("Editar Venta" if venta_id else "Nueva Venta Cerrada")
         self.resize(900, 700)
         self.detalle_venta = {}
         
@@ -746,63 +753,67 @@ class FormularioVenta(QWidget):
         self.setup_tab_propiedad(tab_propiedad)
         
         # Pestaña de posesión efectiva (solo para ventas cerradas)
-        if not en_proceso:
-            tab_pos_efectiva = QWidget()
-            self.tabs.addTab(tab_pos_efectiva, "Posesión Efectiva")
-            self.setup_tab_pos_efectiva(tab_pos_efectiva)
-            index = self.tabs.indexOf(tab_pos_efectiva)
-            self.tabs.setTabVisible(index, False)
-            self.tab_pos_efectiva_index = index  
+        tab_pos_efectiva = QWidget()
+        self.tabs.addTab(tab_pos_efectiva, "Posesión Efectiva")
+        self.setup_tab_pos_efectiva(tab_pos_efectiva)
+        self.tab_pos_efectiva_index = self.tabs.indexOf(tab_pos_efectiva) 
 
 
-        if not en_proceso:
-            tab_tasador = QWidget()
-            self.tabs.addTab(tab_tasador, "Tasador")
-            self.setup_tab_tasador(tab_tasador)
-            index = self.tabs.indexOf(tab_tasador)
-            self.tabs.setTabVisible(index, False)
-            self.tab_tasador_index  = index
+        tab_tasador = QWidget()
+        self.tabs.addTab(tab_tasador, "Tasador")
+        self.setup_tab_tasador(tab_tasador)
+        self.tab_tasador_index = self.tabs.indexOf(tab_tasador)
 
-        if not en_proceso:
-            tab_prea_credito = QWidget()
-            self.tabs.addTab(tab_prea_credito, 'Pre aprobación crédito')
-            self.setup_tab_prea_credito(tab_prea_credito)
-            index = self.tabs.indexOf(tab_prea_credito)
-            self.tabs.setTabVisible(index, False)
-            self.tab_prea_credito_index = index
+        tab_prea_credito = QWidget()
+        self.tabs.addTab(tab_prea_credito, "Pre aprobación crédito")
+        self.setup_tab_prea_credito(tab_prea_credito)
+        self.tab_prea_credito_index = self.tabs.indexOf(tab_prea_credito)
 
-        if not en_proceso:
-            tab_prea_subsidio = QWidget()
-            self.tabs.addTab(tab_prea_subsidio, 'Pre aprobación subsidio')
-            self.setup_tab_prea_subsidio(tab_prea_subsidio)
-            index = self.tabs.indexOf(tab_prea_subsidio)
-            self.tabs.setTabVisible(index, False)
-            self.tab_prea_subsidio_index = index
+        tab_prea_subsidio = QWidget()
+        self.tabs.addTab(tab_prea_subsidio, "Pre aprobación subsidio")
+        self.setup_tab_prea_subsidio(tab_prea_subsidio)
+        self.tab_prea_subsidio_index = self.tabs.indexOf(tab_prea_subsidio)
 
-        if not en_proceso:
-            tab_confeccion_subsidio = QWidget()
-            self.tabs.addTab(tab_confeccion_subsidio, "Confección Escritura")
-            self.setup_tab_confeccion_subsidio(tab_confeccion_subsidio)
-            index = self.tabs.indexOf(tab_confeccion_subsidio)
-            self.tabs.setTabVisible(index, False)
-            self.tab_confeccion_subsidio_index  = index
+        tab_confeccion_subsidio = QWidget()
+        self.tabs.addTab(tab_confeccion_subsidio, "Confección Subsidio")
+        self.setup_tab_confeccion_subsidio(tab_confeccion_subsidio)
+        self.tab_confeccion_subsidio_index = self.tabs.indexOf(tab_confeccion_subsidio)
 
-        if not en_proceso:
-            tab_confeccion_credito = QWidget()
-            self.tabs.addTab(tab_confeccion_credito, "Confección Escritura")
-            self.setup_tab_confeccion_credito(tab_confeccion_credito)
-            index = self.tabs.indexOf(tab_confeccion_credito)
-            self.tabs.setTabVisible(index, False)
-            self.tab_confeccion_credito_index = index
-            
+        tab_confeccion_credito = QWidget()
+        self.tabs.addTab(tab_confeccion_credito, "Confección Crédito")
+        self.setup_tab_confeccion_credito(tab_confeccion_credito)
+        self.tab_confeccion_credito_index = self.tabs.indexOf(tab_confeccion_credito)
 
-        if not en_proceso:
-            tab_docs_pas = QWidget()
-            self.tabs.addTab(tab_docs_pas, "Documentos PAS")
-            self.setup_tab_docs_pas(tab_docs_pas)
-            index = self.tabs.indexOf(tab_docs_pas)
-            self.tabs.setTabVisible(index, False)
-            self.tab_docs_pas_index = index
+        tab_docs_pas = QWidget()
+        self.tabs.addTab(tab_docs_pas, "Documentos PAS")
+        self.setup_tab_docs_pas(tab_docs_pas)
+        self.tab_docs_pas_index = self.tabs.indexOf(tab_docs_pas)
+
+        # === Estado de la venta (combo) ===
+        # Aquí asumimos que en la pestaña de Información Básica tienes un combo self.cmb_estado
+        self.cmb_estado.currentTextChanged.connect(lambda: self.aplicar_estado_ui(self.cmb_estado.currentText()))
+           # Cambiar el nombre de la señal conectada para mayor claridad
+           
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
+        self.toggle_pos_efectiva_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_tasador_tab)
+        self.toggle_tasador_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_subsidio_tab)
+        self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_credito_tab)
+        self.toggle_confeccion_credito_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_credito_tab)
+        self.toggle_prea_credito_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_subsidio_tab)
+        self.toggle_prea_subsidio_tab(self.cmb_tipo_venta.currentText())
+
+        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_docs_pas)
+        self.toggle_docs_pas(self.cmb_tipo_venta.currentText())
 
        
 
@@ -827,7 +838,21 @@ class FormularioVenta(QWidget):
             else:
                 self.cargar_datos_venta(self.venta_id)
         
-        # Tipo de venta
+        
+
+    def aplicar_estado_ui(self, estado):
+        """Ajusta las pestañas visibles según el estado de la venta."""
+        en_proceso = estado.lower() == "en proceso"
+
+        # Ocultar o mostrar pestañas según el estado
+        self.tabs.setTabVisible(self.tab_pos_efectiva_index, not en_proceso)
+        self.tabs.setTabVisible(self.tab_tasador_index, not en_proceso)
+        self.tabs.setTabVisible(self.tab_prea_credito_index, not en_proceso)
+        self.tabs.setTabVisible(self.tab_prea_subsidio_index, not en_proceso)
+        self.tabs.setTabVisible(self.tab_confeccion_subsidio_index, not en_proceso)
+        self.tabs.setTabVisible(self.tab_confeccion_credito_index, not en_proceso)
+        self.tabs.setTabVisible(self.tab_docs_pas_index, not en_proceso)
+
     def setup_tab_basica(self, tab):
         layout = QFormLayout(tab)
         
@@ -841,38 +866,17 @@ class FormularioVenta(QWidget):
             "Credito H. + Subsidio"
         ])
         
-        # Cambiar el nombre de la señal conectada para mayor claridad
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
-        self.toggle_pos_efectiva_tab(self.cmb_tipo_venta.currentText())
-
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_tasador_tab)
-        self.toggle_tasador_tab(self.cmb_tipo_venta.currentText())
-
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_subsidio_tab)
-        self.toggle_confeccion_subsidio_tab(self.cmb_tipo_venta.currentText())
-
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_confeccion_credito_tab)
-        self.toggle_confeccion_credito_tab(self.cmb_tipo_venta.currentText())
-
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_credito_tab)
-        self.toggle_prea_credito_tab(self.cmb_tipo_venta.currentText())
-
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_prea_subsidio_tab)
-        self.toggle_prea_subsidio_tab(self.cmb_tipo_venta.currentText())
-
-        self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_docs_pas)
-        self.toggle_docs_pas(self.cmb_tipo_venta.currentText())
-        
         
         # Estado (solo para ventas cerradas)
         self.cmb_estado = QComboBox()
         self.cmb_estado.addItems([
+            "En Proceso",
             "Negociandose",
             "Cerrada verbalmente",
             "Cerrada en notaria",
             "Inscrita"
         ])
-        self.cmb_estado.setVisible(not self.en_proceso)
+        
         
         # Fecha
         self.date_fecha = QDateEdit(QDate.currentDate())
@@ -897,15 +901,15 @@ class FormularioVenta(QWidget):
         
         layout.addRow(self.crear_label("Tipo de venta:", True), self.cmb_tipo_venta)
         
-        if not self.en_proceso:
-            layout.addRow(self.crear_label("Estado:", True), self.cmb_estado)
+        
+        layout.addRow(self.crear_label("Estado:", True), self.cmb_estado)
         
         layout.addRow(self.crear_label("Fecha:", True), self.date_fecha)
-        layout.addRow(self.crear_label("Monto:", not self.en_proceso), self.txt_monto)
+        layout.addRow(self.crear_label("Monto:"), self.txt_monto)
         layout.addRow(self.crear_label("Observaciones:"), self.txt_observaciones)
         layout.addRow(self.crear_label("Propiedad ofrecida:", True), self.cmb_prop_ofrecida)
         layout.addRow(self.crear_label("Regularizaciones:"), self.cmb_regularizaciones)
-
+        
     def toggle_pos_efectiva_tab(self, tipo_venta):
         if not hasattr(self, 'tab_pos_efectiva_index'):
             return  # protección por si aún no está
@@ -1350,7 +1354,7 @@ class FormularioVenta(QWidget):
         
         # Canal
         self.cmb_canal = QComboBox()
-        self.cmb_canal.addItems(["Justicia", "Registro civil"])
+        self.cmb_canal.addItems(["Justicia", "Registro Civil"])
         
         # Estado proceso
         self.cmb_estado_proceso = QComboBox()
@@ -1594,9 +1598,9 @@ class FormularioVenta(QWidget):
             
             if not self.en_proceso and self.cmb_tipo_venta.currentText() == "Posesion Efectiva":
                 posesion_efectiva = {
-                    'tipo': self.cmb_tipo_pos.currentText().lower(),
-                    'canal': self.cmb_canal.currentText().lower(),
-                    'estado_proceso': self.cmb_estado_proceso.currentText().lower(),
+                    'tipo': self.cmb_tipo_pos.currentText(),
+                    'canal': self.cmb_canal.currentText(),
+                    'estado_proceso': self.cmb_estado_proceso.currentText(),
                     'observaciones': self.txt_obs_pos.toPlainText()
                 }
                 
@@ -1760,7 +1764,7 @@ class FormularioVenta(QWidget):
                 self.txt_comp_rut.setText(comp.get("rut", ""))
                 self.txt_comp_direccion.setText(comp.get("direccion", ""))
                 self.txt_comp_telefono.setText(comp.get("telefono", ""))
-                self.txt_comp_email.setText(comp.get("email", ""))
+                self.txt_comp_email.setText(comp.get("correo", ""))
                 self.txt_comp_banco.setText(comp.get("banco", ""))
                 self.txt_comp_tipo_cuenta.setText(comp.get("tipo_cuenta", ""))
                 self.txt_comp_nro_cuenta.setText(comp.get("nro_cuenta", ""))
@@ -1774,7 +1778,7 @@ class FormularioVenta(QWidget):
                 self.txt_vend_rut.setText(vend.get("rut", ""))
                 self.txt_vend_direccion.setText(vend.get("direccion", ""))
                 self.txt_vend_telefono.setText(vend.get("telefono", ""))
-                self.txt_vend_email.setText(vend.get("email", ""))
+                self.txt_vend_email.setText(vend.get("correo", ""))
                 self.txt_vend_banco.setText(vend.get("banco", ""))
                 self.txt_vend_tipo_cuenta.setText(vend.get("tipo_cuenta", ""))
                 self.txt_vend_nro_cuenta.setText(vend.get("nro_cuenta", ""))
@@ -1801,6 +1805,7 @@ class FormularioVenta(QWidget):
             if tipo_venta == "Posesion Efectiva":
                 # Obtener posesion efectiva
                 posesion = self.detalle_venta.get('posesion', {})
+                
                 if posesion:
                 
                     self.cmb_tipo_pos.setCurrentText(posesion.get("tipo_posesion"))
