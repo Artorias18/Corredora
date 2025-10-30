@@ -107,6 +107,8 @@ class DetalleVentaWindow(QWidget):
             # Muestras la ventana
             self.formulario.show()
 
+            self.close()
+
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo abrir el formulario: {e}")
     
@@ -596,21 +598,24 @@ class DashboardVentas(QMainWindow):
                 self.ventas = ventas or []
             
 
+                self.tabla_ventas.setUpdatesEnabled(False)  # 🔸 Pausa el renderizado de la tabla
+            try:
                 for row, venta in enumerate(ventas):
-                    # Agrega celdas normales
                     self.tabla_ventas.setItem(row, 0, QTableWidgetItem(str(venta.get("id", ""))))
                     self.tabla_ventas.setItem(row, 1, QTableWidgetItem(venta.get("comprador", "")))
                     self.tabla_ventas.setItem(row, 2, QTableWidgetItem(venta.get("vendedor", "")))
                     self.tabla_ventas.setItem(row, 3, QTableWidgetItem(venta.get("propiedad", "")))
                     self.tabla_ventas.setItem(row, 4, QTableWidgetItem(str(venta.get("fecha_venta", ""))))
-                    self.tabla_ventas.setItem(row, 5, QTableWidgetItem(venta.get("estado_venta", "")))
+
+                    # ✅ Aquí aplicas tu mapeo sin problemas visuales
+                    estado_venta = venta.get("estado_venta", "").replace("_", " ").capitalize()
+                    self.tabla_ventas.setItem(row, 5, QTableWidgetItem(estado_venta))
+
                     self.tabla_ventas.setItem(row, 6, QTableWidgetItem(venta.get("tipo_venta", "")))
-
-                    
-
+            finally:
+                self.tabla_ventas.setUpdatesEnabled(True)   # 🔸 Reactiva el renderizado
                 self.tabla_ventas.resizeColumnsToContents()
                 self.tabla_ventas.setColumnHidden(0, True)
-
             
 
         except Exception as e:
@@ -1490,6 +1495,14 @@ class FormularioVenta(QWidget):
             print("Validación correcta, preparando datos")
             # Preparar datos de la venta
 
+            texto_estado = self.cmb_estado.currentText().lower()
+
+            # Excepción para "En Proceso"
+            if texto_estado == "en proceso":
+                texto_estado = "en_proceso"
+
+
+
 
             data_venta = {
                 'comprador': {
@@ -1574,7 +1587,7 @@ class FormularioVenta(QWidget):
                     'monto_venta': self.txt_monto.text() if self.txt_monto.text() else None,
                     'observaciones': self.txt_observaciones.toPlainText(),
                     'tipo_venta': self.cmb_tipo_venta.currentText(),
-                    'estado_venta': 'en_proceso' if self.en_proceso else self.cmb_estado.currentText().lower(),
+                    'estado_venta': texto_estado,
                     'propiedad_ofrecida': self.cmb_prop_ofrecida.currentText(),
                     'regularizaciones': self.cmb_regularizaciones.currentText(),
                     'limitaciones': 'No',  # Valor por defecto
