@@ -3,6 +3,7 @@ import os
 from PySide6.QtWidgets import QMessageBox
 import logging
 from typing import Optional, Dict, Any
+from decimal import Decimal, ROUND_HALF_UP
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -77,9 +78,13 @@ def obtener_detalle_venta(venta_id):
 
     
 def asignar_porcentajes_herencia(herederos):
+    """
+    Asigna porcentajes de herencia para una posesión efectiva intestada.
+    """
+    # Contar tipos
     tipo_counts = {"conyugue": 0, "hijo": 0, "padre": 0, "fisco": 0}
-    for heredero in herederos:
-        tipo = heredero.get("tipo_heredero", "").lower()
+    for h in herederos:
+        tipo = h.get("tipo_heredero", "").lower()
         if tipo in tipo_counts:
             tipo_counts[tipo] += 1
 
@@ -88,90 +93,86 @@ def asignar_porcentajes_herencia(herederos):
     padres = tipo_counts["padre"]
     fisco = tipo_counts["fisco"]
 
-    def ajustar_redondeo(herederos):
-        total = sum(h["porcentaje"] for h in herederos if "porcentaje" in h)
-        diff = round(100 - total, 2)
-        if abs(diff) > 0.01:
-            for h in reversed(herederos):
-                if "porcentaje" in h:
-                    h["porcentaje"] = round(h["porcentaje"] + diff, 2)
-                    break
+    # Inicializar porcentajes
+    for h in herederos:
+        h["porcentaje"] = 0
 
+    # Distribución según escenario
     if hijos > 0 and conyugue > 0:
-        # Escenario: conyugue + hijos
         if 2 <= hijos <= 7:
-            # El cónyuge recibe el doble que cada hijo
-            partes_hijos = hijos
-            partes_conyugue = 2
-            total_partes = partes_hijos + partes_conyugue
+            # Cónyuge doble que cada hijo
+            total_partes = 2 + hijos
             porcentaje_hijo = 100 / total_partes
             porcentaje_conyugue = porcentaje_hijo * 2
-            for heredero in herederos:
-                if heredero["tipo_heredero"] == "hijo":
-                    heredero["porcentaje"] = round(porcentaje_hijo, 2)
-                elif heredero["tipo_heredero"] == "conyugue":
-                    heredero["porcentaje"] = round(porcentaje_conyugue, 2)
-
+            for h in herederos:
+                if h["tipo_heredero"] == "hijo":
+                    h["porcentaje"] = round(porcentaje_hijo, 2)
+                elif h["tipo_heredero"] == "conyugue":
+                    h["porcentaje"] = round(porcentaje_conyugue, 2)
         elif hijos >= 8:
-            # El cónyuge recibe 25%, el resto se reparte entre los hijos
+            # Cónyuge 25%, resto hijos
             porcentaje_conyugue = 25.0
             porcentaje_restante = 75.0 / hijos
-            for heredero in herederos:
-                if heredero["tipo_heredero"] == "hijo":
-                    heredero["porcentaje"] = round(porcentaje_restante, 2)
-                elif heredero["tipo_heredero"] == "conyugue":
-                    heredero["porcentaje"] = porcentaje_conyugue
-
+            for h in herederos:
+                if h["tipo_heredero"] == "hijo":
+                    h["porcentaje"] = round(porcentaje_restante, 2)
+                elif h["tipo_heredero"] == "conyugue":
+                    h["porcentaje"] = porcentaje_conyugue
         else:
-            # Caso general: 1 hijo o casos no cubiertos explícitamente
-            total_partes = hijos + 1  # cónyuge = 1 parte
+            # 1 hijo o escenario no cubierto
+            total_partes = hijos + 1
             porcentaje_base = 100 / total_partes
-            for heredero in herederos:
-                if heredero["tipo_heredero"] in ["hijo", "conyugue"]:
-                    heredero["porcentaje"] = round(porcentaje_base, 2)
+            for h in herederos:
+                if h["tipo_heredero"] in ["hijo", "conyugue"]:
+                    h["porcentaje"] = round(porcentaje_base, 2)
 
     elif hijos > 0 and conyugue == 0:
         # Solo hijos
         porcentaje_hijo = 100 / hijos
-        for heredero in herederos:
-            if heredero["tipo_heredero"] == "hijo":
-                heredero["porcentaje"] = round(porcentaje_hijo, 2)
+        for h in herederos:
+            if h["tipo_heredero"] == "hijo":
+                h["porcentaje"] = round(porcentaje_hijo, 2)
 
     elif conyugue > 0 and hijos == 0 and padres > 0:
-        # Conyugue + padres
+        # Cónyuge + padres
         porcentaje_conyugue = 50
         porcentaje_padre = 50 / padres
-        for heredero in herederos:
-            if heredero["tipo_heredero"] == "conyugue":
-                heredero["porcentaje"] = porcentaje_conyugue
-            elif heredero["tipo_heredero"] == "padre":
-                heredero["porcentaje"] = round(porcentaje_padre, 2)
+        for h in herederos:
+            if h["tipo_heredero"] == "conyugue":
+                h["porcentaje"] = porcentaje_conyugue
+            elif h["tipo_heredero"] == "padre":
+                h["porcentaje"] = round(porcentaje_padre, 2)
 
     elif hijos > 0 and padres > 0 and conyugue == 0:
         # Hijos + padres
         porcentaje_hijo = 50 / hijos
         porcentaje_padre = 50 / padres
-        for heredero in herederos:
-            if heredero["tipo_heredero"] == "hijo":
-                heredero["porcentaje"] = round(porcentaje_hijo, 2)
-            elif heredero["tipo_heredero"] == "padre":
-                heredero["porcentaje"] = round(porcentaje_padre, 2)
+        for h in herederos:
+            if h["tipo_heredero"] == "hijo":
+                h["porcentaje"] = round(porcentaje_hijo, 2)
+            elif h["tipo_heredero"] == "padre":
+                h["porcentaje"] = round(porcentaje_padre, 2)
 
     elif conyugue > 0 and hijos == 0 and padres == 0:
-        # Solo conyugue
-        for heredero in herederos:
-            if heredero["tipo_heredero"] == "conyugue":
-                heredero["porcentaje"] = 100.0
+        # Solo cónyuge
+        for h in herederos:
+            if h["tipo_heredero"] == "conyugue":
+                h["porcentaje"] = 100.0
 
-    elif fisco > 0:
-        # Sin herederos → herencia al fisco
-        for heredero in herederos:
-            if heredero["tipo_heredero"] == "fisco":
-                heredero["porcentaje"] = 100.0
+    elif fisco > 0 or len(herederos) == 0:
+        # Herencia al fisco si no hay otros herederos
+        for h in herederos:
+            if h["tipo_heredero"] == "fisco":
+                h["porcentaje"] = 100.0
 
-    ajustar_redondeo(herederos)
+    # Ajuste final para que la suma sea 100%
+    total = round(sum(h["porcentaje"] for h in herederos), 2)
+    diff = round(100 - total, 2)
+    if abs(diff) > 0.01 and herederos:
+        herederos[-1]["porcentaje"] = round(herederos[-1]["porcentaje"] + diff, 2)
 
     return herederos
+
 
 
 
@@ -182,49 +183,53 @@ def asignar_porcentajes_herencia_testada(herederos, mejoras=None, libre_disposic
     mejoras: lista de ruts de herederos que recibirán la cuarta de mejoras.
     libre_disposicion: diccionario con rut como clave y porcentaje (del 25%) como valor.
     """
-    total_porcentaje = 0
-
     mejoras = mejoras or []
     libre_disposicion = libre_disposicion or {}
 
     # Identificar herederos forzosos
     herederos_forzosos = [h for h in herederos if h.get("tipo_heredero") == "forzoso"]
-    total_forzosos = len(herederos_forzosos)
-
-    if total_forzosos == 0:
+    if not herederos_forzosos:
         raise ValueError("Debe haber al menos un heredero forzoso en posesión testada.")
-    
+
+    # Inicializar porcentajes
     for h in herederos:
         h["porcentaje"] = 0
-        
-    # Asignar mitad legítima (50%)
-    porcentaje_legitima = 50 / total_forzosos
-    for heredero in herederos_forzosos:
-        heredero["porcentaje"] = porcentaje_legitima
+
+    # Asignar mitad legítima (50%) entre forzosos
+    porcentaje_legitima = 50 / len(herederos_forzosos)
+    for h in herederos_forzosos:
+        h["porcentaje"] += porcentaje_legitima
 
     # Asignar cuarta de mejoras (25%)
     if mejoras:
         porcentaje_mejora = 25 / len(mejoras)
-        for heredero in herederos:
-            if heredero["rut"] in mejoras:
-                heredero["porcentaje"] += porcentaje_mejora
+        for h in herederos:
+            if h["rut"] in mejoras:
+                h["porcentaje"] += porcentaje_mejora
 
     # Asignar cuarta de libre disposición (25%)
-    total_libre = sum(libre_disposicion.values())
-    if round(total_libre, 2) != 25.0:
-        raise ValueError(f"La suma de libre disposición debe ser 25%, pero es {total_libre}%")
+    if libre_disposicion:
+        total_libre = sum(libre_disposicion.values())
+        if total_libre != 25:
+            # Normalizar proporcionalmente
+            factor = 25 / total_libre
+        else:
+            factor = 1
 
-    for heredero in herederos:
-        rut = heredero["rut"]
-        if rut in libre_disposicion:
-            heredero["porcentaje"] = heredero.get("porcentaje", 0) + libre_disposicion[rut]
+        for h in herederos:
+            rut = h["rut"]
+            if rut in libre_disposicion:
+                h["porcentaje"] += libre_disposicion[rut] * factor
 
-    # Redondeo final (opcional)
-    for heredero in herederos:
-        heredero["porcentaje"] = round(heredero["porcentaje"], 2)
+    # Redondeo final
+    for h in herederos:
+        h["porcentaje"] = round(h["porcentaje"], 2)
 
-    if round(total_porcentaje, 2) > 100:
+    # Validar suma total
+    total_porcentaje = round(sum(h["porcentaje"] for h in herederos), 2)
+    if total_porcentaje > 100:
         raise ValueError(f"La suma total de porcentajes de herencia supera el 100%: {total_porcentaje}%")
+
 
 
 
@@ -266,7 +271,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'nro_cuenta': data_venta['comprador'].get('nro_cuenta', ''),
                 'poder_judicial': data_venta['comprador'].get('poder_judicial', 'No')
             }
-            supabase.table("comprador").upsert(comprador_data).execute()
+            supabase.table("comprador").upsert(comprador_data, 
+                                               on_conflict="rut").execute()
 
         # 2. Guardar/actualizar vendedor si hay datos
         if any([data_venta['vendedor'].get('rut')]):
@@ -282,7 +288,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'poder_judicial': data_venta['vendedor'].get('poder_judicial', 'No'),
                 'posesion_efectiva': 'Si' if data_venta['venta']['tipo_venta'] == 'Posesion Efectiva' else 'No'
             }
-            supabase.table("vendedor").upsert(vendedor_data).execute()
+            supabase.table("vendedor").upsert(vendedor_data,
+                                              on_conflict="rut").execute()
         
         # 3. Guardar/actualizar propiedad
         propiedad_data = {
@@ -293,7 +300,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             'estudio_titulos': data_venta['propiedad'].get('estudio_titulos', 'No Posee Documento'),
             'dominio_vigente': data_venta['propiedad'].get('dominio_vigente', 'No Posee Documento')
         }
-        supabase.table("propiedad").upsert(propiedad_data).execute()
+        supabase.table("propiedad").upsert(propiedad_data,
+                                           on_conflict= "codigo_interno").execute()
 
 
         
@@ -303,7 +311,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'limitaciones_dominio': data_venta['venta'].get('limitaciones', 'No'),
                 'viabilidad_vendedor': data_venta['venta'].get('viabilidad', '')
             }
-            supabase.table("estado_documental").upsert(estado_doc_data).execute()
+            supabase.table("estado_documental").upsert(estado_doc_data,
+                                                       on_conflict= "codigo_interno").execute()
 
         if es_venta_cerrada and tipo_venta in ["Credito H.", "Credito H. + Subsidio"]:
 
@@ -326,13 +335,15 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
             porcentaje_str = pre_aprobacion_data.get('porcentaje_financiamiento', '0')  # siempre un string
             try:
-                porcentaje = float(porcentaje_str)  # convierte a número, acepta decimales
-            except ValueError:
-                porcentaje = 0  # si no se puede convertir, usar 0 por defecto
+                # Convierte a Decimal, divide entre 100 y fija 4 decimales exactos
+                porcentaje = (Decimal(porcentaje_str) / Decimal(100)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+            except Exception:
+                porcentaje = Decimal("0.0000")
 
-            pre_aprobacion_data['porcentaje_financiamiento'] = porcentaje / 100
+            pre_aprobacion_data['porcentaje_financiamiento'] = float(porcentaje)
 
-            supabase.table("pre_aprobacion_credito").upsert(pre_aprobacion_data).execute()
+            supabase.table("pre_aprobacion_credito").upsert(pre_aprobacion_data,
+                                                            on_conflict= "codigo_interno").execute()
 
         if es_venta_cerrada and tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:
 
@@ -355,14 +366,15 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
 
             porcentaje_sub_str = subsidio_aprobado_data.get('porcentaje_subsidio', '0')
             try:
-                porcentaje_sub = float(porcentaje_sub_str)
-
-            except ValueError:
-                porcentaje_sub = 0
+                # Convierte a Decimal, divide entre 100 y fija 4 decimales exactos
+                porcentaje_sub = (Decimal(porcentaje_sub_str) / Decimal(100)).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+            except Exception:
+                porcentaje_sub = Decimal("0.0000")
             
-            subsidio_aprobado_data['porcentaje_subsidio'] = porcentaje_sub / 100
+            subsidio_aprobado_data['porcentaje_subsidio'] = float(porcentaje_sub)
 
-            supabase.table("subsidio_aprobado").upsert(subsidio_aprobado_data).execute()
+            supabase.table("subsidio_aprobado").upsert(subsidio_aprobado_data,
+                                                       on_conflict= "codigo_interno").execute()
 
 
             
@@ -378,7 +390,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                     'codigo_interno': data_venta['propiedad']['codigo'],
                     'correo_electronico': data_venta['tasador'].get('correo', ''),
                 }
-                supabase.table("tasador").upsert(tasador_data).execute()
+                supabase.table("tasador").upsert(tasador_data,
+                                                 on_conflict="rut").execute()
 
 
             if any([data_venta['recepcion_definitiva'].get('superficie'), 
@@ -391,7 +404,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                     'recepcion': data_venta['recepcion_definitiva'].get('recepcion', 'No Posee Documento')
                 } 
                 
-                supabase.table("recepcion_definitiva").upsert(recepcion_data).execute()
+                supabase.table("recepcion_definitiva").upsert(recepcion_data,
+                                                              on_conflict= "codigo_interno").execute()
             
             if any([
                 data_venta['documentos_tasacion'].get('doc_propiedad'),
@@ -408,7 +422,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                     'certif_habitabilidad': data_venta['documentos_tasacion']['certif_habitabilidad']
 
                 }
-                supabase.table("documentos_tasacion").upsert(tasacion_data).execute()
+                supabase.table("documentos_tasacion").upsert(tasacion_data,
+                                                             on_conflict= "codigo_interno").execute()
 
             confeccion_data = {
                 'codigo_interno': data_venta['propiedad']['codigo'],
@@ -419,7 +434,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'dj_vend_no_habitual': data_venta['documentos_escritura'].get('dj_vend_no_habitual', 'No Posee Documento'),
                 'dj_comp_no_parientes_cargos_publicos': data_venta['documentos_escritura'].get('dj_comp_no_parientes_cargos_publicos', 'No Posee Documento')
             }
-            supabase.table("documentos_escritura").upsert(confeccion_data).execute()
+            supabase.table("documentos_escritura").upsert(confeccion_data,
+                                                          on_conflict= "codigo_interno").execute()
 
 
 
@@ -495,7 +511,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'reparos' : data_venta['documentos_pas'].get('reparos','')
             }
             
-            supabase.table("documentos_pas").upsert(documentos_pas_data).execute()
+            supabase.table("documentos_pas").upsert(documentos_pas_data,
+                                                    on_conflict= "codigo_interno").execute()
 
 
 
@@ -548,7 +565,8 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                 'estado_proceso': data_posesion.get('estado_proceso', 'solicitud'),
                 'observaciones': data_posesion.get('observaciones', '')
             }
-            supabase.table("posesion_efectiva").upsert(posesion_data).execute()
+            supabase.table("posesion_efectiva").upsert(posesion_data,
+                                                       on_conflict= "codigo_interno").execute()
             
             if herederos:
                 herederos_data = []
@@ -566,7 +584,7 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
                     }
                     herederos_data.append(heredero_data)
                 
-                supabase.table("herederos").insert(herederos_data).execute()
+                supabase.table("herederos").upsert(herederos_data, on_conflict=["heredero_key"]).execute()
 
         # Retornar id de la venta
         return venta_id
