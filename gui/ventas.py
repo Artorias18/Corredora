@@ -1,14 +1,11 @@
-from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
+from PySide6.QtWidgets import QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado, eliminar_venta
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
-from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
-from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
-from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuario_actual import UsuarioActual
 from services.supabase_client import supabase
 import json
+import pandas as pd
 from decimal import Decimal, ROUND_HALF_UP
 
 
@@ -88,6 +85,11 @@ class DetalleVentaWindow(QWidget):
         self.btn_editar.clicked.connect(self.abrir_formulario_edicion)
         layout_contenido.addWidget(self.btn_editar)
 
+        self.btnEliminar = QPushButton("Eliminar Venta")
+        self.btnEliminar.clicked.connect(self.eliminar_venta)
+        layout_contenido.addWidget(self.btnEliminar)
+
+
     def abrir_formulario_edicion(self):
         try:
             # Traer venta
@@ -114,6 +116,42 @@ class DetalleVentaWindow(QWidget):
 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo abrir el formulario: {e}")
+
+    
+    def eliminar_venta(self):
+        try:
+            # 1️⃣ Obtener el código interno de la venta
+            codigo_interno = self.detalle_venta.get("propiedad", {}).get("codigo_interno")
+            
+            if not codigo_interno:
+                QMessageBox.warning(self, "Eliminar venta", "No se encontró el código interno de esta venta.")
+                return
+
+            # 2️⃣ Confirmar con el usuario
+            confirm = QMessageBox.question(
+                self,
+                "Confirmar eliminación",
+                f"¿Seguro que deseas eliminar la venta con código '{codigo_interno}'?\n"
+                "Esto eliminará todos los registros.",
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if confirm != QMessageBox.Yes:
+                return
+
+            # 3️⃣ Llamar al backend
+            resultado = eliminar_venta(codigo_interno)
+
+            QMessageBox.information(self, "Eliminar venta", str(resultado))
+
+            if self.dashboard:
+                try:
+                    self.dashboard.cargar_ventas()
+                except:
+                    pass
+            self.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Ocurrió un error al eliminar la venta:\n{str(e)}")
     
     def setup_tab_info_general(self):
         tab = QWidget()
@@ -691,12 +729,41 @@ class DashboardVentas(QMainWindow):
     
     
     def exportar_a_excel(self):
-        # Implementar exportación a Excel
-        pass
+        try:
+            if not self.ventas:
+                QMessageBox.warning(self, "Exportar a Excel", "No hay ventas para exportar.")
+                return
 
-    def eliminar_venta(self):
-        # Implementar eliminación segura
-        pass
+            # Pedir ruta de guardado
+            ruta, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar archivo Excel",
+                "ventas.xlsx",
+                "Excel Files (*.xlsx)"
+            )
+            if not ruta:
+                return
+
+            import pandas as pd
+
+            # Convertir lista de diccionarios a DataFrame
+            df = pd.DataFrame(self.ventas)
+
+            # Separar por tipo de venta
+            tipos_venta = df['tipo_venta'].unique() if 'tipo_venta' in df else []
+
+            # Crear un ExcelWriter para varias hojas
+            with pd.ExcelWriter(ruta, engine="xlsxwriter") as writer:
+                tipos = df["tipo_venta"].unique()
+                for tipo in tipos:
+                    df_tipo = df[df["tipo_venta"] == tipo]
+                    df_tipo.to_excel(writer, sheet_name=tipo[:31], index=False)
+
+            QMessageBox.information(self, "Exportar", f"Ventas exportadas correctamente a:\n{ruta}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudieron exportar las ventas:\n{str(e)}")
+
 
     def get_user_role(self,user_id):
 

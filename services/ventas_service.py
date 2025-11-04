@@ -53,6 +53,22 @@ def obtener_detalle_venta(venta_id):
         logging.error(f"Error crítico al obtener venta {venta_id}: {str(e)}", exc_info=True)
         return None
 
+def eliminar_venta(codigo_interno):
+
+    try:
+        response = supabase.rpc("eliminar_venta", {"p_codigo_interno" : codigo_interno}).execute()
+        
+        if response.data:
+            print(response.data)
+            return response.data
+        else:
+            print("Error:", response.error)
+            return None
+        
+    except Exception as e:
+        print("Excepción al eliminar:", e)
+        return None
+
 
 # def actualizar_estado_venta(venta_id, nuevo_estado):
 #     try:
@@ -256,12 +272,26 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
         
         # Determinar tipo de venta
         tipo_venta = data_venta['venta'].get('tipo_venta', '')
+
+        # Guardar/actualizar propiedad
+        propiedad_data = {
+            'codigo_interno': data_venta['propiedad']['codigo'],
+            'direccion': data_venta['propiedad'].get('direccion', ''),
+            'rol': data_venta['propiedad'].get('rol', 0),
+            'comuna': data_venta['propiedad'].get('comuna', ''),
+            'estudio_titulos': data_venta['propiedad'].get('estudio_titulos', 'No Posee Documento'),
+            'dominio_vigente': data_venta['propiedad'].get('dominio_vigente', 'No Posee Documento')
+        }
+        supabase.table("propiedad").upsert(propiedad_data,
+                                           on_conflict= "codigo_interno").execute()
         
+
 
         # 1. Guardar/actualizar comprador si hay datos
         if any ([data_venta['comprador'].get('rut')]):
             comprador_data = {
                 'rut': data_venta['comprador']['rut'],
+                'codigo_interno': data_venta['propiedad']['codigo'],
                 'nombre': data_venta['comprador'].get('nombre', ''),
                 'direccion': data_venta['comprador'].get('direccion', ''),
                 'telefono': data_venta['comprador'].get('telefono', ''),
@@ -278,6 +308,7 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
         if any([data_venta['vendedor'].get('rut')]):
             vendedor_data = {
                 'rut': data_venta['vendedor']['rut'],
+                'codigo_interno': data_venta['propiedad']['codigo'],
                 'nombre': data_venta['vendedor'].get('nombre', ''),
                 'direccion': data_venta['vendedor'].get('direccion', ''),
                 'telefono': data_venta['vendedor'].get('telefono', ''),
@@ -290,18 +321,6 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             }
             supabase.table("vendedor").upsert(vendedor_data,
                                               on_conflict="rut").execute()
-        
-        # 3. Guardar/actualizar propiedad
-        propiedad_data = {
-            'codigo_interno': data_venta['propiedad']['codigo'],
-            'direccion': data_venta['propiedad'].get('direccion', ''),
-            'rol': data_venta['propiedad'].get('rol', 0),
-            'comuna': data_venta['propiedad'].get('comuna', ''),
-            'estudio_titulos': data_venta['propiedad'].get('estudio_titulos', 'No Posee Documento'),
-            'dominio_vigente': data_venta['propiedad'].get('dominio_vigente', 'No Posee Documento')
-        }
-        supabase.table("propiedad").upsert(propiedad_data,
-                                           on_conflict= "codigo_interno").execute()
 
 
         
