@@ -1,23 +1,21 @@
-from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
+from PySide6.QtWidgets import QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado, eliminar_venta
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
-from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
-from PySide6.QtWidgets import QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.ventas_service import obtener_ventas_resumen, obtener_detalle_venta, asignar_porcentajes_herencia, guardar_venta, asignar_porcentajes_herencia_testada, obtener_ventas_por_estado
-from PySide6.QtCore import Qt, QDate, Signal
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuario_actual import UsuarioActual
 from services.supabase_client import supabase
 import json
-
+import pandas as pd
+from decimal import Decimal, ROUND_HALF_UP
 
 
 
 class DetalleVentaWindow(QWidget):
-    def __init__(self, venta_id, rol):
+    def __init__(self, venta_id, rol, dashboard=None):
         super().__init__()
         self.venta_id = venta_id
         self.rol = rol
+        self.dashboard = dashboard
         self.setWindowTitle(f"Detalle de Venta #{venta_id}")
         self.resize(900, 700)
         
@@ -87,6 +85,11 @@ class DetalleVentaWindow(QWidget):
         self.btn_editar.clicked.connect(self.abrir_formulario_edicion)
         layout_contenido.addWidget(self.btn_editar)
 
+        self.btnEliminar = QPushButton("Eliminar Venta")
+        self.btnEliminar.clicked.connect(self.eliminar_venta)
+        layout_contenido.addWidget(self.btnEliminar)
+
+
     def abrir_formulario_edicion(self):
         try:
             # Traer venta
@@ -104,6 +107,8 @@ class DetalleVentaWindow(QWidget):
             # Llamas a la función que carga los datos en el formulario
             self.formulario.cargar_datos_venta(venta_id=self.venta_id)
 
+            self.formulario.venta_guardada.connect(self.dashboard.cargar_ventas)
+
             # Muestras la ventana
             self.formulario.show()
 
@@ -111,6 +116,42 @@ class DetalleVentaWindow(QWidget):
 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo abrir el formulario: {e}")
+
+    
+    def eliminar_venta(self):
+        try:
+            # 1️⃣ Obtener el código interno de la venta
+            codigo_interno = self.detalle_venta.get("propiedad", {}).get("codigo_interno")
+            
+            if not codigo_interno:
+                QMessageBox.warning(self, "Eliminar venta", "No se encontró el código interno de esta venta.")
+                return
+
+            # 2️⃣ Confirmar con el usuario
+            confirm = QMessageBox.question(
+                self,
+                "Confirmar eliminación",
+                f"¿Seguro que deseas eliminar la venta con código '{codigo_interno}'?\n"
+                "Esto eliminará todos los registros.",
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if confirm != QMessageBox.Yes:
+                return
+
+            # 3️⃣ Llamar al backend
+            resultado = eliminar_venta(codigo_interno)
+
+            QMessageBox.information(self, "Eliminar venta", str(resultado))
+
+            if self.dashboard:
+                try:
+                    self.dashboard.cargar_ventas()
+                except:
+                    pass
+            self.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Ocurrió un error al eliminar la venta:\n{str(e)}")
     
     def setup_tab_info_general(self):
         tab = QWidget()
@@ -123,9 +164,9 @@ class DetalleVentaWindow(QWidget):
         campos = [
             ("ID Venta", venta.get('id')),
             ("Fecha", venta.get('fecha_venta')),
-            ("Monto", f"${int(venta.get('monto_venta', 0)):,}" if venta.get('monto_venta') else "No especificado"),
+            ("Monto", (f"${int(venta.get('monto_venta', 0)):,}".replace(",", ".") if venta.get('monto_venta') else "No especificado")),
             ("Tipo de venta", venta.get('tipo_venta')),
-            ("Estado", venta.get('estado_venta', '').capitalize()),
+            ("Estado", venta.get('estado_venta', '').replace("_", " ").capitalize()),
             ("Propiedad ofrecida", venta.get('propiedad_ofrecida')),
             ("Regularizaciones", venta.get('regularizaciones')),
             ("Observaciones", venta.get('observaciones'))
@@ -180,7 +221,7 @@ class DetalleVentaWindow(QWidget):
             ("Posesión efectiva", vendedor.get('posesion_efectiva'))
         ]
 
-        print(vendedor.get('correo'))
+        
         
         for label, value in campos:
             if value:
@@ -292,6 +333,7 @@ class DetalleVentaWindow(QWidget):
         
         # Tabla de herederos
         layout.addWidget(QLabel("<b>Herederos:</b>"))
+
         
         tabla = QTableWidget(len(herederos), 4)
         tabla.setHorizontalHeaderLabels(["Nombre", "RUT", "Tipo", "Porcentaje"])
@@ -352,8 +394,8 @@ class DetalleVentaWindow(QWidget):
             layout.addRow(QLabel("<b>Preaprobación de Subsidio:</b>"), QLabel(""))
 
             campos_subsidio = [
-                ("Porcentaje de Financiamiento", f"{subsidio.get('porcentaje_subsidio','') * 100}%"),
-                ("Monto Financiamiento", f"${int(subsidio.get('monto_subsidio')):,}" if subsidio.get('monto_subsidio') else "No especificado"),
+                ("Porcentaje de Financiamiento", f"{float(subsidio.get('porcentaje_subsidio') or 0) * 100:.1f}%"),
+                ("Monto Financiamiento", (f"${int(subsidio.get('monto_subsidio')):,}".replace(",", ".") if subsidio.get('monto_subsidio') else "No especificado")),
                 ("Estado Subsidio", subsidio.get('estado_subsidio')),
                 
             ]
@@ -399,9 +441,9 @@ class DetalleVentaWindow(QWidget):
             layout.addRow(QLabel("<b>Abonos:</b>"), QLabel(""))
 
             campos_abonos = [
-                ("Abono Previo",f"${int(venta.get('abono_previsto')):,}" if venta.get('abono_previsto') else "No especificado"),
-                ("Abono Real",f"${int(venta.get('abono_real')):,}" if venta.get('abono_real') else "No especificado"),
-                ("Saldo Pendiente",f"${int(venta.get('saldo_pendiente')):,}")
+                ("Abono Previo",(f"${int(venta.get('abono_previsto')):,}".replace(",", ".") if venta.get('abono_previsto') else "No especificado")),
+                ("Abono Real",(f"${int(venta.get('abono_real')):,}".replace(",", ".") if venta.get('abono_real') else "No especificado")),
+                ("Saldo Pendiente",f"${int(venta.get('saldo_pendiente')):,}".replace(",", "."))
             ]
 
             for label, value in campos_abonos:
@@ -441,8 +483,8 @@ class DetalleVentaWindow(QWidget):
 
         if credito:
             campos_credito = [
-                ("Porcentaje de Financiamiento",f"{credito.get('porcentaje_financiamiento','') * 100}%"),
-                ("Monto Financiamiento",f"${int(credito.get('monto_financiamiento')):,}" if credito.get('monto_financiamiento') else "No especificado"),
+                ("Porcentaje de Financiamiento", f"{float(credito.get('porcentaje_financiamiento') or 0) * 100:.1f}%"),
+                ("Monto Financiamiento",(f"${int(credito.get('monto_financiamiento')):,}".replace(",", ".") if credito.get('monto_financiamiento') else "No especificado")),
                 ("Banco que concede el credito", credito.get('banco_credito','')),
                 ("Estado Aprobación", credito.get('estado_preaprobacion'))
             ]
@@ -682,17 +724,46 @@ class DashboardVentas(QMainWindow):
     
     def mostrar_detalle_venta(self, item):
         venta_id = int(self.tabla_ventas.item(item.row(), 0).text())
-        self.ventana_detalle = DetalleVentaWindow(venta_id, self.rol)
+        self.ventana_detalle = DetalleVentaWindow(venta_id, self.rol, dashboard=self)
         self.ventana_detalle.show()
     
     
     def exportar_a_excel(self):
-        # Implementar exportación a Excel
-        pass
+        try:
+            if not self.ventas:
+                QMessageBox.warning(self, "Exportar a Excel", "No hay ventas para exportar.")
+                return
 
-    def eliminar_venta(self):
-        # Implementar eliminación segura
-        pass
+            # Pedir ruta de guardado
+            ruta, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar archivo Excel",
+                "ventas.xlsx",
+                "Excel Files (*.xlsx)"
+            )
+            if not ruta:
+                return
+
+            import pandas as pd
+
+            # Convertir lista de diccionarios a DataFrame
+            df = pd.DataFrame(self.ventas)
+
+            # Separar por tipo de venta
+            tipos_venta = df['tipo_venta'].unique() if 'tipo_venta' in df else []
+
+            # Crear un ExcelWriter para varias hojas
+            with pd.ExcelWriter(ruta, engine="xlsxwriter") as writer:
+                tipos = df["tipo_venta"].unique()
+                for tipo in tipos:
+                    df_tipo = df[df["tipo_venta"] == tipo]
+                    df_tipo.to_excel(writer, sheet_name=tipo[:31], index=False)
+
+            QMessageBox.information(self, "Exportar", f"Ventas exportadas correctamente a:\n{ruta}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudieron exportar las ventas:\n{str(e)}")
+
 
     def get_user_role(self,user_id):
 
@@ -847,16 +918,17 @@ class FormularioVenta(QWidget):
 
     def aplicar_estado_ui(self, estado):
         """Ajusta las pestañas visibles según el estado de la venta."""
-        en_proceso = estado.lower() == "en proceso"
+        # en_proceso = estado.lower() == "en proceso"
 
-        # Ocultar o mostrar pestañas según el estado
-        self.tabs.setTabVisible(self.tab_pos_efectiva_index, not en_proceso)
-        self.tabs.setTabVisible(self.tab_tasador_index, not en_proceso)
-        self.tabs.setTabVisible(self.tab_prea_credito_index, not en_proceso)
-        self.tabs.setTabVisible(self.tab_prea_subsidio_index, not en_proceso)
-        self.tabs.setTabVisible(self.tab_confeccion_subsidio_index, not en_proceso)
-        self.tabs.setTabVisible(self.tab_confeccion_credito_index, not en_proceso)
-        self.tabs.setTabVisible(self.tab_docs_pas_index, not en_proceso)
+        # # Ocultar o mostrar pestañas según el estado
+        # self.tabs.setTabVisible(self.tab_pos_efectiva_index, not en_proceso)
+        # self.tabs.setTabVisible(self.tab_tasador_index, not en_proceso)
+        # self.tabs.setTabVisible(self.tab_prea_credito_index, not en_proceso)
+        # self.tabs.setTabVisible(self.tab_prea_subsidio_index, not en_proceso)
+        # self.tabs.setTabVisible(self.tab_confeccion_subsidio_index, not en_proceso)
+        # self.tabs.setTabVisible(self.tab_confeccion_credito_index, not en_proceso)
+        # self.tabs.setTabVisible(self.tab_docs_pas_index, not en_proceso)
+        return
 
     def setup_tab_basica(self, tab):
         layout = QFormLayout(tab)
@@ -1110,19 +1182,22 @@ class FormularioVenta(QWidget):
 
     def on_abono_previo_cambiado_subsidio(self, texto):
         try:
-            self.abono_previo_val = float(texto.replace(",", "."))
+            texto_limpio = texto.replace(".", "").replace(",", ".")
+            self.abono_previo_val = float(texto_limpio)
         except ValueError:
             self.abono_previo_val = None  # si no es número válido
         self.validar_abono_subsidio()
 
     def on_abono_real_cambiado_subsidio(self, texto):
         try:
-            self.abono_real_val = float(texto.replace(",", "."))
+            texto_limpio = texto.replace(".", "").replace(",", ".")
+            self.abono_real_val = float(texto_limpio)
         except ValueError:
             self.abono_real_val = None
         self.validar_abono_subsidio()
 
     def validar_abono_subsidio(self):
+            
             if self.abono_previo_val is None or self.abono_real_val is None:
                 self.lbl_validacion_abono_subsidio.setText("Debe ingresar valores validos en los abonos para hacer la validación")
                 self.lbl_validacion_abono_subsidio.setStyleSheet("color:red")
@@ -1133,7 +1208,7 @@ class FormularioVenta(QWidget):
                 dif_a_pagar_int = int(dif_a_pagar)
 
             if self.abono_previo_val >= self.abono_real_val:
-                self.lbl_validacion_abono_subsidio.setText(f"El abono previo cubre o supera el abono real: {dif_a_pagar_int}")
+                self.lbl_validacion_abono_subsidio.setText("El abono previo cubre o supera el abono real, el comprador no debe depositar.")
                 self.lbl_validacion_abono_subsidio.setStyleSheet("color: green;")
             else:
                 self.lbl_validacion_abono_subsidio.setText(f"El abono real es mayor al abono previo, el comprador debe depositar: {dif_a_pagar_int}")
@@ -1426,7 +1501,7 @@ class FormularioVenta(QWidget):
             self.tabs.setCurrentIndex(4)
     
     def actualizar_formulario_herederos(self, tipo_pos):
-        # Configurar tabla de herederos según tipo de posesión
+        # Configurar columnas y encabezados según tipo de posesión
         if tipo_pos == "Testada":
             self.tabla_herederos.setColumnCount(5)
             self.tabla_herederos.setHorizontalHeaderLabels([
@@ -1437,6 +1512,47 @@ class FormularioVenta(QWidget):
             self.tabla_herederos.setHorizontalHeaderLabels([
                 "Nombre", "RUT", "Tipo Heredero"
             ])
+
+        # Recorrer todas las filas existentes y actualizar widgets según tipo de posesión
+        for row in range(self.tabla_herederos.rowCount()):
+            # --- Actualizar combobox columna 2 ---
+            cmb_tipo = self.tabla_herederos.cellWidget(row, 2)
+            if isinstance(cmb_tipo, QComboBox):
+                # Guardar selección actual si existe
+                seleccion = cmb_tipo.currentText()
+                cmb_tipo.clear()
+                if tipo_pos == "Testada":
+                    cmb_tipo.addItems(["Forzoso", "Conyugue", "Hijo", "Padre"])
+                else:
+                    cmb_tipo.addItems(["Conyugue", "Hijo", "Padre", "Fisco", "Otro"])
+                # Restaurar selección si sigue en la lista
+                if seleccion in [cmb_tipo.itemText(i) for i in range(cmb_tipo.count())]:
+                    cmb_tipo.setCurrentText(seleccion)
+                else:
+                    cmb_tipo.setCurrentIndex(0)  # O selecciona el primer item
+
+            # --- Columnas 3 y 4 solo para Testada ---
+            if tipo_pos == "Testada":
+                # Columna 3: Recibe mejoras (checkbox)
+                if self.tabla_herederos.item(row, 3) is None:
+                    chk_mejoras = QTableWidgetItem()
+                    chk_mejoras.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                    chk_mejoras.setCheckState(Qt.Unchecked)
+                    self.tabla_herederos.setItem(row, 3, chk_mejoras)
+
+                # Columna 4: % Libre disposición (spinbox)
+                if self.tabla_herederos.cellWidget(row, 4) is None:
+                    spin_porcentaje = QDoubleSpinBox()
+                    spin_porcentaje.setRange(0, 100)
+                    spin_porcentaje.setValue(0)
+                    self.tabla_herederos.setCellWidget(row, 4, spin_porcentaje)
+
+            else:  # Intestada
+                # Eliminar columna 3 y 4 si existían
+                if self.tabla_herederos.item(row, 3) is not None:
+                    self.tabla_herederos.setItem(row, 3, None)
+                if self.tabla_herederos.cellWidget(row, 4) is not None:
+                    self.tabla_herederos.removeCellWidget(row, 4)
     
     def agregar_heredero(self):
         row = self.tabla_herederos.rowCount()
@@ -1503,7 +1619,6 @@ class FormularioVenta(QWidget):
 
 
 
-
             data_venta = {
                 'comprador': {
                     'nombre': self.txt_comp_nombre.text(),
@@ -1517,7 +1632,7 @@ class FormularioVenta(QWidget):
                     'poder_judicial': self.cmb_comp_poder.currentText()
                 },
                 'pre_aprobacion_credito':{
-                    'porcentaje_financiamiento': self.txt_porc_financiamiento.text(),
+                    'porcentaje_financiamiento': self.txt_porc_financiamiento.text().replace("%", "").strip(),
                     'monto_financiamiento': self.txt_monto_financiamiento.text(),
                     'diferencias': self.txt_diferencias_prea_credito.toPlainText(),
                     'banco_credito': self.txt_banco_credito.text(),
@@ -1525,7 +1640,7 @@ class FormularioVenta(QWidget):
                 },
                 'subsidio_aprobado' : {
                     'monto_subsidio': self.txt_monto_subsidio.text(),
-                    'porcentaje_subsidio': self.txt_porc_subsidio.text(),
+                    'porcentaje_subsidio': self.txt_porc_subsidio.text().replace("%", "").strip(),
                     'resolucion_subsidio': self.txt_resolucion_subsidio.toPlainText(),
                     'estado_subsidio': self.cmb_estado_subsidio.currentText()
                 },
@@ -1757,7 +1872,7 @@ class FormularioVenta(QWidget):
             
     
             self.date_fecha.setDate(QDate.fromString(venta.get("fecha_venta", QDate.currentDate().toString("yyyy-MM-dd")), "yyyy-MM-dd"))
-            self.txt_monto.setText(f"{(int(venta.get('monto_venta', 0))):,}")
+            self.txt_monto.setText(f"{(int(venta.get('monto_venta', 0))):,}".replace(",", "."))
             self.txt_observaciones.setPlainText(venta.get("observaciones", ""))
 
 
@@ -1768,7 +1883,20 @@ class FormularioVenta(QWidget):
 
             tipo_venta = venta.get("tipo_venta", "")
             self.cmb_tipo_venta.setCurrentText(tipo_venta)
-                        
+
+            estado_bd = venta.get("estado_venta", "")
+
+            if estado_bd == "en_proceso":
+                estado_combo = "En Proceso"
+            else:
+                # Convierte solo la primera letra a mayúscula, mantiene el resto igual
+                estado_combo = estado_bd.replace("_", " ").capitalize()
+
+            # Buscar y seleccionar el texto correcto en el combo
+            index = self.cmb_estado.findText(estado_combo, Qt.MatchFixedString)
+            if index >= 0:
+                self.cmb_estado.setCurrentIndex(index)
+                                    
 
             # Obtener comprador
             comp = self.detalle_venta.get('comprador', {})
@@ -1845,18 +1973,7 @@ class FormularioVenta(QWidget):
                 
                 
                 if herederos:
-                    self.tabla_herederos.setRowCount(0)
-                    for idx, heredero in enumerate(herederos):
-                        self.tabla_herederos.insertRow(idx)
-                        self.tabla_herederos.setItem(idx, 0, QTableWidgetItem(heredero.get("nombre", "")))
-                        self.tabla_herederos.setItem(idx, 1, QTableWidgetItem(heredero.get("rut", "")))
-                        porcentaje = heredero.get("porcentaje", "")
-
-                        if isinstance(porcentaje, (int, float)):
-                            porcentaje = f"{porcentaje}%"
-
-                        self.tabla_herederos.setItem(idx, 2, QTableWidgetItem(str(porcentaje)))
-                        self.tabla_herederos.setItem(idx, 3, QTableWidgetItem(heredero.get("tipo_heredero", "")))
+                    self.poblar_tabla_herederos(herederos, self.cmb_tipo_pos.currentText())
 
             
             if tipo_venta in ["Subsidio", "Credito H.", "Credito H. + Subsidio"]:
@@ -1904,13 +2021,21 @@ class FormularioVenta(QWidget):
                     porcentaje_finan_sub = prea.get("porcentaje_subsidio")
 
                     if porcentaje_finan_sub is not None:
-                        porcentaje_finan_sub_str = f"{porcentaje_finan_sub * 100}"
+
+                        try:
+                            # Usa Decimal para precisión exacta
+                            porcentaje_decimal_sub = Decimal(str(porcentaje_finan_sub)) * Decimal(100)
+                                # Redondea a 2 decimales
+                            porcentaje_finan_sub_str = str(porcentaje_decimal_sub.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+                        except Exception:
+                            porcentaje_finan_sub_str = ""
+
                     else:
-                        porcentaje_finan__sub_str = ""
+                        porcentaje_finan_sub_str = ""
 
                     
                     self.txt_porc_subsidio.setText(porcentaje_finan_sub_str)
-                    self.txt_monto_subsidio.setText(f"{(int(prea.get('monto_subsidio', 0))):,}")
+                    self.txt_monto_subsidio.setText(f"{(int(prea.get('monto_subsidio', 0))):,}".replace(",", "."))
                     self.cmb_estado_subsidio.setCurrentText(prea.get("estado_subsidio", "Sin definir"))
                     self.txt_resolucion_subsidio.setPlainText(prea.get("resolucion_subsidio", ""))
 
@@ -1927,8 +2052,8 @@ class FormularioVenta(QWidget):
                     self.cmb_doc_dj_vend_no_habitual.setCurrentText(confe_sub.get("dj_vend_no_habitual","No Posee Documento"))
                     self.cmb_doc_dj_comp_no_parientes_cargos_publicos.setCurrentText(confe_sub.get("dj_comp_no_parientes_cargos_publicos","No Posee Documento"))
 
-                    self.txt_abono_previo.setText(f"{(int(venta.get('abono_previsto', 0))):,}")
-                    self.txt_abono_real.setText(f"{(int(venta.get('abono_real', 0))):,}")
+                    self.txt_abono_previo.setText(f"{(int(venta.get('abono_previsto', 0))):,}".replace(",", "."))
+                    self.txt_abono_real.setText(f"{(int(venta.get('abono_real', 0))):,}".replace(",", "."))
                 
                 # Obtener docs pas
 
@@ -1954,14 +2079,20 @@ class FormularioVenta(QWidget):
 
                     if porcentaje_finan_cred is not None:
 
-                        porcentaje_finan_cred_str = f"{porcentaje_finan_cred * 100}"
+                        try:
+                            # Usa Decimal para precisión exacta
+                            porcentaje_decimal = Decimal(str(porcentaje_finan_cred)) * Decimal(100)
+                            # Redondea a 2 decimales
+                            porcentaje_finan_cred_str = str(porcentaje_decimal.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+                        except Exception:
+                            porcentaje_finan_cred_str = ""
                     else:
                         porcentaje_finan_cred_str = ""
 
                     
 
                     self.txt_porc_financiamiento.setText(porcentaje_finan_cred_str)
-                    self.txt_monto_financiamiento.setText(f"{(int(prea_cred.get('monto_financiamiento', 0))):,}")
+                    self.txt_monto_financiamiento.setText(f"{(int(prea_cred.get('monto_financiamiento', 0))):,}".replace(",", "."))
                     self.txt_banco_credito.setText(prea_cred.get("banco_credito",""))
                     self.cmb_estado_aprobacion.setCurrentText(prea_cred.get("estado_preaprobacion"))
                     self.txt_diferencias_prea_credito.setPlainText(prea_cred.get("diferencias",""))
@@ -1982,3 +2113,45 @@ class FormularioVenta(QWidget):
         except Exception as e:
             print(f"Error al cargar venta: {str(e)}")
             QMessageBox.warning(self, "Error", f"No se pudieron cargar los datos de la venta: {str(e)}")
+
+    def poblar_tabla_herederos(self, herederos, tipo_pos):
+        """Llena la tabla de herederos según tipo de posesión."""
+        self.cmb_tipo_pos.setCurrentText(tipo_pos)
+        self.actualizar_formulario_herederos(tipo_pos)
+
+        self.tabla_herederos.setRowCount(0)
+
+        for idx, heredero in enumerate(herederos):
+            self.tabla_herederos.insertRow(idx)
+
+            # Columna 0: Nombre
+            self.tabla_herederos.setItem(idx, 0, QTableWidgetItem(heredero.get("nombre", "")))
+
+            # Columna 1: RUT
+            self.tabla_herederos.setItem(idx, 1, QTableWidgetItem(heredero.get("rut", "")))
+
+            # Columna 2: Tipo Heredero (ComboBox)
+            cmb_tipo = QComboBox()
+            if tipo_pos == "Testada":
+                cmb_tipo.addItems(["Forzoso", "Conyugue", "Hijo", "Padre"])
+            else:
+                cmb_tipo.addItems(["Conyugue", "Hijo", "Padre", "Fisco", "Otro"])
+            
+            tipo = heredero.get("tipo_heredero", "")
+            if tipo:
+                cmb_tipo.setCurrentText(tipo.capitalize())
+            self.tabla_herederos.setCellWidget(idx, 2, cmb_tipo)
+
+            # Columnas 3 y 4 solo para Testada
+            if tipo_pos == "Testada":
+                # Columna 3: Recibe mejoras (checkbox)
+                chk_mejoras = QTableWidgetItem()
+                chk_mejoras.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+                chk_mejoras.setCheckState(Qt.Checked if heredero.get("recibe_mejoras", False) else Qt.Unchecked)
+                self.tabla_herederos.setItem(idx, 3, chk_mejoras)
+
+                # Columna 4: % Libre disposición (spinbox)
+                spin_porcentaje = QDoubleSpinBox()
+                spin_porcentaje.setRange(0, 100)
+                spin_porcentaje.setValue(heredero.get("porcentaje_libre_disposicion", 0))
+                self.tabla_herederos.setCellWidget(idx, 4, spin_porcentaje)
