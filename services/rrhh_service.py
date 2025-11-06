@@ -77,29 +77,51 @@ def obtener_detalle_liquidacion(liquidacion_id):
     except Exception as e:
         print("Error al obtener detalle de liquidación:", e)
         return []
-
 def crear_liquidacion(data, detalles):
-    """Crea una liquidación y sus ítems asociados (con recálculo SQL)."""
+    """Crea una liquidación y sus ítems asociados."""
     try:
         data.setdefault("fecha_emision", date.today().isoformat())
 
-        # Inserta cabecera
-        response = supabase.table("liquidacion_rrhh").insert(data).execute()
+        # ✅ Filtrar solo columnas válidas para liquidacion_rrhh
+        columnas_validas = {
+            "trabajador_rut",
+            "periodo",
+            "dias_trabajados",
+            "sueldo_base",
+            "total_haberes_imponibles",
+            "total_haberes_no_imponibles",
+            "total_descuentos",
+            "liquido_pagar",
+            "fecha_emision",
+        }
+
+        data_filtrada = {k: v for k, v in data.items() if k in columnas_validas}
+
+        # Insertar la cabecera
+        response = supabase.table("liquidacion_rrhh").insert(data_filtrada).execute()
+        if not response.data:
+            print("Error: no se insertó la cabecera de liquidación.")
+            return None
+
         liquidacion_id = response.data[0]["id"]
 
-        # Inserta detalles
+        # Insertar detalles asociados
         for d in detalles:
             d["liquidacion_id"] = liquidacion_id
+
         if detalles:
             supabase.table("liquidacion_detalle_rrhh").insert(detalles).execute()
 
-        #  Recalcular totales en SQL (RPC)
+        # Recalcular totales en la BD
         supabase.rpc("calcular_totales_liquidacion", {"liquidacion_uuid": liquidacion_id}).execute()
 
+        print(" Liquidación creada correctamente:", liquidacion_id)
         return liquidacion_id
+
     except Exception as e:
         print("Error al crear liquidación:", e)
         return None
+
 
 
 
@@ -143,6 +165,30 @@ def calcular_liquidacion(datos):
     except Exception as e:
         print("Error al calcular liquidación:", e)
         return datos
+
+
+def actualizar_liquidacion(liquidacion_id, data, detalles):
+    """Actualiza una liquidación existente y recalcula los totales."""
+    try:
+        # Actualiza la cabecera
+        supabase.table("liquidacion_rrhh").update(data).eq("id", liquidacion_id).execute()
+
+        # Elimina los detalles antiguos
+        supabase.table("liquidacion_detalle_rrhh").delete().eq("liquidacion_id", liquidacion_id).execute()
+
+        # Inserta los nuevos detalles
+        for d in detalles:
+            d["liquidacion_id"] = liquidacion_id
+        supabase.table("liquidacion_detalle_rrhh").insert(detalles).execute()
+
+        # Recalcula totales con la función SQL
+        supabase.rpc("calcular_totales_liquidacion", {"liquidacion_uuid": liquidacion_id}).execute()
+
+        print(f"✅ Liquidación actualizada correctamente: {liquidacion_id}")
+        return True
+    except Exception as e:
+        print("Error al actualizar liquidación:", e)
+        return False
 
 
 

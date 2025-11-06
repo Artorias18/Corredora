@@ -5,6 +5,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 from services import rrhh_service
+from services.rrhh_service import calcular_liquidacion
+
 import re
 
 # ====================================================
@@ -229,7 +231,7 @@ class DialogoLiquidacion(QDialog):
         self.setWindowTitle("Generar Liquidación")
         layout = QFormLayout(self)
 
-        # Campos principales
+        # Combo con los trabajadores
         self.rut = QComboBox()
         trabajadores = rrhh_service.obtener_trabajadores()
         for t in trabajadores:
@@ -237,10 +239,8 @@ class DialogoLiquidacion(QDialog):
 
         self.periodo = QLineEdit("2025-11")
 
-        # Campos de cálculo
-        self.sueldo_base = QDoubleSpinBox()
-        self.sueldo_base.setMaximum(99999999)
-
+        # Campos base
+        self.sueldo_base = QDoubleSpinBox(); self.sueldo_base.setMaximum(99999999)
         self.gratificacion = QDoubleSpinBox()
         self.horas_extras = QDoubleSpinBox()
         self.bonos = QDoubleSpinBox()
@@ -248,18 +248,16 @@ class DialogoLiquidacion(QDialog):
         self.movilizacion = QDoubleSpinBox()
         self.otros_descuentos = QDoubleSpinBox()
 
-        # Resultados automáticos
-        self.afp = QDoubleSpinBox()
-        self.salud = QDoubleSpinBox()
+        # Descuentos legales (autocalculados)
+        self.afp = QDoubleSpinBox(); self.afp.setMaximum(9999999)
+        self.salud = QDoubleSpinBox(); self.salud.setMaximum(9999999)
+
+        # Totales mostrados
         self.total_imponibles = QLabel("0")
         self.total_descuentos = QLabel("0")
         self.liquido_pagar = QLabel("0")
 
-        for sp in [self.sueldo_base, self.gratificacion, self.horas_extras, self.bonos,
-                   self.colacion, self.movilizacion, self.otros_descuentos]:
-            sp.setMaximum(9999999)
-
-        # Layout de formulario
+        # Agregar al layout
         layout.addRow("Trabajador:", self.rut)
         layout.addRow("Periodo:", self.periodo)
         layout.addRow("Sueldo Base:", self.sueldo_base)
@@ -273,8 +271,8 @@ class DialogoLiquidacion(QDialog):
         layout.addRow("AFP:", self.afp)
         layout.addRow("Salud:", self.salud)
         layout.addRow(QLabel("<b>Totales</b>"))
-        layout.addRow("Total Imponibles:", self.total_imponibles)
-        layout.addRow("Total Descuentos:", self.total_descuentos)
+        layout.addRow("Haberes Imponibles:", self.total_imponibles)
+        layout.addRow("Descuentos:", self.total_descuentos)
         layout.addRow("Líquido a Pagar:", self.liquido_pagar)
 
         # Botones
@@ -282,35 +280,51 @@ class DialogoLiquidacion(QDialog):
         self.botones.accepted.connect(self.calcular_y_guardar)
         self.botones.rejected.connect(self.reject)
         layout.addWidget(self.botones)
-
         self.setLayout(layout)
 
         # Conexiones
         self.rut.currentIndexChanged.connect(self.autocompletar_trabajador)
+        for sp in [self.sueldo_base, self.gratificacion, self.horas_extras, self.bonos,
+                   self.colacion, self.movilizacion, self.otros_descuentos]:
+            sp.valueChanged.connect(self.actualizar_totales)
 
         self.datos = None
         self.autocompletar_trabajador()
 
-    # ====================================================
-    # Autocompleta los campos desde el trabajador
-    # ====================================================
+    # Autocompletar desde trabajador
     def autocompletar_trabajador(self):
         t = self.rut.currentData()
         if not t:
             return
         self.sueldo_base.setValue(float(t.get("sueldo_base", 0)))
-        self.afp.setValue(round(t.get("sueldo_base", 0) * 0.1144, 0))  # 11.44%
+        self.afp.setValue(round(t.get("sueldo_base", 0) * 0.1144, 0))
         salud_pct = t.get("cotizacion_salud", 7.0)
         self.salud.setValue(round(t.get("sueldo_base", 0) * salud_pct / 100, 0))
+        self.actualizar_totales()
 
-    # ====================================================
-    # Cálculo y guardado
-    # ====================================================
+    # Cálculo en vivo
+    def actualizar_totales(self):
+        datos = {
+            "sueldo_base": self.sueldo_base.value(),
+            "gratificacion": self.gratificacion.value(),
+            "horas_extras": self.horas_extras.value(),
+            "bonos": self.bonos.value(),
+            "colacion": self.colacion.value(),
+            "movilizacion": self.movilizacion.value(),
+            "afp": self.afp.value(),
+            "salud": self.salud.value(),
+            "otros_descuentos": self.otros_descuentos.value(),
+        }
+
+        datos = rrhh_service.calcular_liquidacion(datos)
+        self.total_imponibles.setText(str(datos["total_haberes_imponibles"]))
+        self.total_descuentos.setText(str(datos["total_descuentos"]))
+        self.liquido_pagar.setText(str(datos["liquido_pagar"]))
+
+    # Guardar final
     def calcular_y_guardar(self):
-        from services.rrhh_service import calcular_liquidacion
-
         base_data = {
-            "trabajador_rut": self.rut.currentData().get("rut"),
+            "trabajador_rut": self.rut.currentText().split(" - ")[0],
             "periodo": self.periodo.text().strip(),
             "sueldo_base": self.sueldo_base.value(),
             "gratificacion": self.gratificacion.value(),
@@ -320,25 +334,16 @@ class DialogoLiquidacion(QDialog):
             "movilizacion": self.movilizacion.value(),
             "afp": self.afp.value(),
             "salud": self.salud.value(),
-            "otros_descuentos": self.otros_descuentos.value()
-        } 
+            "otros_descuentos": self.otros_descuentos.value(),
+        }
 
-        
+        base_data = rrhh_service.calcular_liquidacion(base_data)
 
-        
-
-        base_data = calcular_liquidacion(base_data)
-
-        # Mostrar resultados
-        self.total_imponibles.setText(str(base_data["total_haberes_imponibles"]))
-        self.total_descuentos.setText(str(base_data["total_descuentos"]))
-        self.liquido_pagar.setText(str(base_data["liquido_pagar"]))
-
-        # Crear detalles
         detalles = [
             {"tipo": "imponible", "descripcion": "Sueldo Base", "monto": base_data["sueldo_base"]},
             {"tipo": "imponible", "descripcion": "Gratificación", "monto": base_data["gratificacion"]},
             {"tipo": "imponible", "descripcion": "Horas Extras", "monto": base_data["horas_extras"]},
+            {"tipo": "imponible", "descripcion": "Bonos", "monto": base_data["bonos"]},
             {"tipo": "no_imponible", "descripcion": "Colación", "monto": base_data["colacion"]},
             {"tipo": "no_imponible", "descripcion": "Movilización", "monto": base_data["movilizacion"]},
             {"tipo": "descuento", "descripcion": "AFP", "monto": base_data["afp"]},
@@ -348,6 +353,8 @@ class DialogoLiquidacion(QDialog):
 
         self.datos = (base_data, detalles)
         self.accept()
+
+
 
 
 
@@ -364,6 +371,10 @@ class TabLiquidaciones(QWidget):
         self.btn_agregar = QPushButton(" Nueva Liquidación")
         self.btn_ver = QPushButton(" Ver Detalle")
         self.btn_eliminar = QPushButton(" Eliminar")
+        self.btn_editar = QPushButton("Editar")
+        boton_layout.addWidget(self.btn_editar)
+        self.btn_editar.clicked.connect(self.editar_liquidacion)
+
         boton_layout.addWidget(self.btn_agregar)
         boton_layout.addWidget(self.btn_ver)
         boton_layout.addWidget(self.btn_eliminar)
@@ -462,3 +473,40 @@ class TabLiquidaciones(QWidget):
             liquidacion_id = rrhh_service.obtener_liquidaciones()[fila]["id"]
             rrhh_service.eliminar_liquidacion(liquidacion_id)
             self.cargar_liquidaciones()
+
+
+
+    def editar_liquidacion(self):
+        fila = self.tabla.currentRow()
+        if fila < 0:
+            QMessageBox.warning(self, "Atención", "Seleccione una liquidación para editar.")
+            return
+
+        liquidaciones = rrhh_service.obtener_liquidaciones()
+        liquidacion = liquidaciones[fila]
+        detalles = rrhh_service.obtener_detalle_liquidacion(liquidacion["id"])
+
+        # Abre el diálogo precargado
+        dialogo = DialogoLiquidacion()
+        dialogo.periodo.setText(liquidacion["periodo"])
+        dialogo.rut.setCurrentText(liquidacion["trabajador_rut"])
+
+        # Cargamos datos básicos (si existen)
+        dialogo.sueldo_base.setValue(float(liquidacion.get("sueldo_base", 0)))
+        dialogo.gratificacion.setValue(next((d["monto"] for d in detalles if d["descripcion"] == "Gratificación"), 0))
+        dialogo.horas_extras.setValue(next((d["monto"] for d in detalles if d["descripcion"] == "Horas Extras"), 0))
+        dialogo.bonos.setValue(next((d["monto"] for d in detalles if d["descripcion"] == "Bonos"), 0))
+        dialogo.colacion.setValue(next((d["monto"] for d in detalles if d["descripcion"] == "Colación"), 0))
+        dialogo.movilizacion.setValue(next((d["monto"] for d in detalles if d["descripcion"] == "Movilización"), 0))
+        dialogo.otros_descuentos.setValue(next((d["monto"] for d in detalles if d["descripcion"] == "Otros"), 0))
+
+        if dialogo.exec():
+            data, nuevos_detalles = dialogo.datos
+            rrhh_service.actualizar_liquidacion(liquidacion["id"], data, nuevos_detalles)
+            self.cargar_liquidaciones()
+
+        
+
+
+
+            
