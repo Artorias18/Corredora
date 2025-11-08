@@ -521,7 +521,7 @@ class DetalleVentaWindow(QWidget):
 
 
 
-class DashboardVentas(QMainWindow):
+class DashboardVentas(QWidget):
     def __init__(self, rol, parent=None):
         super().__init__(parent)
         self.rol = rol
@@ -529,9 +529,8 @@ class DashboardVentas(QMainWindow):
         self.resize(1200, 800)
         self.cargando_tabla = False
         # Widget central
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
+
+        main_layout = QVBoxLayout(self)
         
         # Barra de filtros
         filter_layout = QHBoxLayout()
