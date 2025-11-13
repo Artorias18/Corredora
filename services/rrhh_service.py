@@ -23,6 +23,7 @@ def crear_trabajador(data):
             raise ValueError("El RUT y el nombre son obligatorios.")
 
         data.setdefault("created_at", date.today().isoformat())
+        #cambiar insert, pa poder editar papitooo
         response = supabase.table("trabajador").insert(data).execute()
         return response.data
     except Exception as e:
