@@ -24,12 +24,10 @@ class DashboardArriendos(QWidget):
          # Filtro de estado
         self.filtro_estado = QComboBox()
         self.filtro_estado.addItems([
-            "Todas las ventas",
-            "En proceso",
-            "Negociandose", 
-            "Cerradas verbalmente",
-            "Cerradas en notaría",
-            "Inscritas"
+            "Todas los arriendos",
+            "Vigentes",
+            "Terminados"
+            
         ])
         self.filtro_estado.currentIndexChanged.connect(self.filtrar_arriendos)
         
@@ -55,7 +53,7 @@ class DashboardArriendos(QWidget):
         layout.addLayout(filter_layout)
 
 
-         # Tabla de ventas
+         # Tabla de arriendos
         self.tabla_arriendos = QTableWidget()
         self.tabla_arriendos.setColumnCount(6)
         self.tabla_arriendos.setHorizontalHeaderLabels([
@@ -103,7 +101,6 @@ class DashboardArriendos(QWidget):
         try:
             self.cargando_tabla = True
             
-
 
             self.tabla_arriendos.setRowCount(0)
             estado_filtro = self.filtro_estado.currentText()
@@ -154,15 +151,10 @@ class DashboardArriendos(QWidget):
 
     def abrir_formulario_arriendo(self, en_proceso=False):
         self.formulario_arriendo = FormularioArriendo()
-        self.formulario_arriendo.venta_guardada.connect(self.cargar_arriendos)
+        self.formulario_arriendo.arriendo_guardado.connect(self.cargar_arriendos)
         self.formulario_arriendo.show()
 
         
-    def crear_label(self, texto, obligatorio=False):
-        label = QLabel(texto)
-        if obligatorio:
-            label.setProperty("obligatorio", "true")
-        return label
     
 
 class FormularioArriendo(QWidget):
@@ -171,3 +163,165 @@ class FormularioArriendo(QWidget):
     def __init__(self,arriendo_id=None, parent=None):
         super().__init__(parent)
         self.arriendo_id = arriendo_id
+
+        self.setWindowTitle("Editar Arriendo" if arriendo_id else "Nuevo Arriendo")
+        self.resize(900, 700)
+        self.detalle_arriendo = {}
+
+        # Layout principal con scroll
+        layout_principal = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        contenido = QWidget()
+        scroll.setWidget(contenido)
+        layout_principal.addWidget(scroll)
+        
+        # Layout del formulario
+        layout_form = QVBoxLayout(contenido)
+        
+        # Pestañas para organizar el formulario
+        self.tabs = QTabWidget()
+        layout_form.addWidget(self.tabs)
+
+
+        tab_arrendador = QWidget()
+        self.tabs.addTab(tab_arrendador, "Arrendador")
+        self.setup_tab_arrendador(tab_arrendador)
+
+        tab_arrendatario = QWidget()
+        self.tabs.addTab(tab_arrendatario , "Arrendatario")
+        self.setup_tab_arrendatario(tab_arrendatario )
+
+
+        btn_guardar = QPushButton("Guardar Arriendo")
+        btn_guardar.clicked.connect(self.guardar_arriendo)
+        layout_form.addWidget(btn_guardar)
+        
+        # Estilo para campos obligatorios
+        self.setStyleSheet("""
+            QLabel[obligatorio="true"] {
+                font-weight: bold;
+                color: #FF0000;
+            }
+        """)
+
+        if self.arriendo_id:
+            self.detalle_arriendo = obtener_detalle_arriendo(self.arriendo_id)
+            if not self.detalle_arriendo:
+                layout_principal.addWidget(QLabel("No se encontraron detalles para este arriendo"))
+            else:
+                self.cargar_datos_arriendo(self.arriendo_id)
+
+    
+
+
+    def setup_tab_arrendador(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Campos del comprador
+        self.txt_arren_nombre = QLineEdit()
+        self.txt_arren_rut = QLineEdit()
+        self.txt_arren_direccion = QLineEdit()
+        self.txt_arren_telefono = QLineEdit()
+        self.txt_arren_email = QLineEdit()
+     
+        
+        # Agregar campos
+
+        layout.addRow(self.crear_label("Nombre:", True), self.txt_arren_nombre)
+        layout.addRow(self.crear_label("RUT:", True), self.txt_arren_rut)
+        layout.addRow(self.crear_label("Dirección:"), self.txt_arren_direccion)
+        layout.addRow(self.crear_label("Teléfono:"), self.txt_arren_telefono)
+        layout.addRow(self.crear_label("Email:"), self.txt_arren_email)
+
+    def setup_tab_arrendatario(self, tab):
+        layout = QFormLayout(tab)
+        
+        # Campos del comprador
+        self.txt_arrendatario_nombre = QLineEdit()
+        self.txt_arrendatario_rut = QLineEdit()
+        self.txt_arrendatario_direccion = QLineEdit()
+        self.txt_arrendatario_telefono = QLineEdit()
+        self.txt_arrendatario_email = QLineEdit()
+        self.txt_sueldo_base = QLineEdit()
+        self.txt_horas_extras = QLineEdit()
+        self.txt_afp = QLineEdit()
+        self.txt_salud = QLineEdit()
+        self.txt_cesantia = QLineEdit()
+        self.cmb_tipo_trabajador = QComboBox()
+        self.cmb_tipo_trabajador.addItems(["Dependiente", "Independiente", "Otro"])
+        self.txt_bono_1 = QLineEdit()
+        self.txt_bono_2 = QLineEdit()
+        self.txt_bono_3 = QLineEdit()
+        self.txt_colacion = QLineEdit()
+        self.txt_locomocion = QLineEdit()
+        self.txt_cargas_familiares = QLineEdit()
+        self.txt_viaticos = QLineEdit()
+        self.txt_herramientas = QLineEdit()
+        self.txt_otros = QLineEdit()
+        self.txt_antiguedad_laboral = QLineEdit()
+        self.cmb_dicom = QComboBox()
+        self.cmb_dicom.addItems(["Si","No"])
+        self.txt_comentarios = QTextEdit()
+        self.cmb_evaluacion_estado = QComboBox()
+        self.cmb_evaluacion_estado.addItems(["Pendiente","Aprobado","Rechazado"])
+
+        self.fecha_evaluacion = QDateEdit(QDate.currentDate())
+        self.fecha_evaluacion.setCalendarPopup(True)
+
+        self.txt_renta = QLineEdit()
+
+     
+        
+        # Agregar campos
+
+        layout.addRow(self.crear_label("Nombre:", True), self.txt_arrendatario_nombre)
+        layout.addRow(self.crear_label("RUT:", True), self.txt_arrendatario_rut)
+        layout.addRow(self.crear_label("Dirección:"), self.txt_arrendatario_direccion)
+        layout.addRow(self.crear_label("Teléfono:"), self.txt_arrendatario_telefono)
+        layout.addRow(self.crear_label("Email:"), self.txt_arrendatario_email)
+        
+        layout.addRow(self.crear_label("Tipo de Trabajador:"), self.cmb_tipo_trabajador)
+        layout.addRow(self.crear_label("Sueldo Base:"), self.txt_sueldo_base)
+        layout.addRow(self.crear_label("Horas Extras:"), self.txt_horas_extras)
+        layout.addRow(self.crear_label("AFP:"), self.txt_afp)
+        layout.addRow(self.crear_label("Salud:"), self.txt_salud)
+        layout.addRow(self.crear_label("Cesantía:"), self.txt_cesantia)
+        layout.addRow(self.crear_label("Bono 1:"), self.txt_bono_1)
+        layout.addRow(self.crear_label("Bono 2:"), self.txt_bono_2)
+        layout.addRow(self.crear_label("Bono 3:"), self.txt_bono_3)
+        layout.addRow(self.crear_label("Colación:"), self.txt_colacion)
+        layout.addRow(self.crear_label("Locomoción:"), self.txt_locomocion)
+        layout.addRow(self.crear_label("Cargas Familiares:"), self.txt_cargas_familiares)
+        layout.addRow(self.crear_label("Viáticos:"), self.txt_viaticos)
+        layout.addRow(self.crear_label("Herramientas:"), self.txt_herramientas)
+        layout.addRow(self.crear_label("Otros:"), self.txt_otros)
+        layout.addRow(self.crear_label("Antigüedad Laboral (meses):"), self.txt_antiguedad_laboral)
+
+        # --- Evaluación ---
+        layout.addRow(self.crear_label("¿Tiene DICOM?"), self.cmb_dicom)
+        layout.addRow(self.crear_label("Comentarios:"), self.txt_comentarios)
+        layout.addRow(self.crear_label("Estado de Evaluación:"), self.cmb_evaluacion_estado)
+        layout.addRow(self.crear_label("Fecha Evaluación:"), self.fecha_evaluacion)
+        layout.addRow(self.crear_label("Renta Mensual:"), self.txt_renta)
+                
+
+
+
+
+
+
+
+    def cargar_datos_arriendo(self, arriendo_id):
+        pass
+
+
+    def guardar_arriendo(self):
+        pass
+
+
+    def crear_label(self, texto, obligatorio=False):
+        label = QLabel(texto)
+        if obligatorio:
+            label.setProperty("obligatorio", "true")
+        return label
