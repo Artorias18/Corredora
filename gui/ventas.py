@@ -1769,10 +1769,8 @@ class FormularioVenta(QWidget):
                     "La venta se ha guardado correctamente.\n\n"
                     f"ID de venta: {venta_id}"
                 )
-                print("Mensaje mostrado, emitiendo señal y cerrando ventana")
                 self.venta_guardada.emit()
                 self.close()
-                print("Ventana cerrada")
             else:
                 print("guardar_venta retornó ID falso o None")
         
