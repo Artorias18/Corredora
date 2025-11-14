@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QMainWindow, QLabel, QTabWidget
 from PySide6.QtCore import Qt
-from gui import ventas, arriendos, rrhh, finanzas, gestion_usuarios, admin_condominios, propiedades
+from gui import ventas, arriendos, rrhh, finanzas, gestion_usuarios, admin_condominios
 
 class MainWindow(QMainWindow):
     def __init__(self, rol):
@@ -11,11 +11,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
         self.showMaximized()
         self.tabs.addTab(ventas.DashboardVentas(rol), "Ventas")
-        self.tabs.addTab(arriendos.DashboardArriendos(), "Arriendos")
-        self.tabs.addTab(propiedades.DashboardPropiedades(), "Propiedades")
-        self.tabs.addTab(rrhh.DashboardRRHH(), "RRHH")
         self.tabs.addTab(finanzas.DashboardFinanzas(), "Finanzas")
-        self.tabs.addTab(admin_condominios.DashboardAdminCondominios(), "Condominios")
+        self.tabs.addTab(rrhh.DashboardRRHH(), "RRHH")
+        self.tabs.addTab(arriendos.DashboardArriendos(), "Arriendos")
+        self.tabs.addTab(admin_condominios.DashboardAdminCondominios(), "Propiedades")
 
         if rol == "superusuario":
             self.tabs.addTab(gestion_usuarios.DashboardUsuarios(), "Gestión de Usuarios")
