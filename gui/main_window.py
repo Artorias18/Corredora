@@ -11,10 +11,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
         self.showMaximized()
         self.tabs.addTab(ventas.DashboardVentas(rol), "Ventas")
-        self.tabs.addTab(finanzas.DashboardFinanzas(), "Finanzas")
-        self.tabs.addTab(rrhh.DashboardRRHH(), "RRHH")
         self.tabs.addTab(arriendos.DashboardArriendos(), "Arriendos")
         self.tabs.addTab(admin_condominios.DashboardAdminCondominios(), "Propiedades")
+        self.tabs.addTab(rrhh.DashboardRRHH(), "RRHH")
+        self.tabs.addTab(finanzas.DashboardFinanzas(), "Finanzas")
 
         if rol == "superusuario":
             self.tabs.addTab(gestion_usuarios.DashboardUsuarios(), "Gestión de Usuarios")

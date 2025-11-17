@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from PySide6.QtWidgets import QHeaderView, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
 from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo, obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
@@ -167,6 +167,7 @@ class FormularioArriendo(QWidget):
         self.setWindowTitle("Editar Arriendo" if arriendo_id else "Nuevo Arriendo")
         self.resize(900, 700)
         self.detalle_arriendo = {}
+        self.evaluacion_meses = {}
 
         # Layout principal con scroll
         layout_principal = QVBoxLayout(self)
@@ -344,38 +345,141 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Dominio vigente:"), self.cmb_dominio_vigente)
 
 
-    def setup_tab_evaluacion(self,tab):
-        layout= QFormLayout(tab)
+    def setup_tab_evaluacion(self, tab):
+        layout = QFormLayout(tab)
 
+        # Contenedor para centrar la tabla
+        contenedor = QWidget()
+        contenedor_layout = QVBoxLayout(contenedor)
+        contenedor_layout.setAlignment(Qt.AlignCenter)
 
+        # Crear tabla
         self.tbl_evaluacion = QTableWidget()
-        self.tbl_evaluacion.setRowCount(8)
+        self.tbl_evaluacion.setRowCount(9)
         self.tbl_evaluacion.setColumnCount(4)
+
+        # Tamaño mínimo más grande
+        self.tbl_evaluacion.setMinimumWidth(700)
+        self.tbl_evaluacion.setMinimumHeight(300)
 
         # Encabezados
         self.tbl_evaluacion.setHorizontalHeaderLabels([
             "Concepto", "Mes 1", "Mes 2", "Mes 3"
         ])
 
+        # Centrar texto de encabezados
+        header = self.tbl_evaluacion.horizontalHeader()
+        header.setDefaultAlignment(Qt.AlignCenter)
+
         conceptos = [
             "Sueldo Base (SB)",
             "Gratificación (GT)",
             "TH Imponibles (THIMP)",
-            "Loc/Móvil (LOCMOV)",
+            "Locomoción / Movilización (LOCMOV)",
             "TH No Imponibles (THNI)",
             "Descuentos Legales",
             "Descuentos Varios",
+            "Anticipos",
             "Líquido a Pago"
         ]
 
         # Llenar columna de conceptos
         for i, concepto in enumerate(conceptos):
             item = QTableWidgetItem(concepto)
-            item.setFlags(item.flags() ^ Qt.ItemIsEditable)  # Hacerlo no editable
+            item.setFlags(item.flags() ^ Qt.ItemIsEditable)
+            item.setTextAlignment(Qt.AlignVCenter | Qt.AlignLeft)
             self.tbl_evaluacion.setItem(i, 0, item)
 
-        layout.addRow(self.tbl_evaluacion)
-        
+        # Ajustar automáticamente tamaños de columnas
+        self.tbl_evaluacion.resizeColumnsToContents()
+        header = self.tbl_evaluacion.horizontalHeader()
+
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+
+        # Añadir tabla al contenedor centrado
+        contenedor_layout.addWidget(self.tbl_evaluacion)
+
+        botones_layout = QHBoxLayout()
+        botones_layout.setAlignment(Qt.AlignCenter)
+
+        self.btn_mes1 = QPushButton("Ingresar Mes 1")
+        self.btn_mes2 = QPushButton("Ingresar Mes 2")
+        self.btn_mes3 = QPushButton("Ingresar Mes 3")
+
+        self.btn_mes1.clicked.connect(lambda: self.abrir_formulario_mes(1))
+        self.btn_mes2.clicked.connect(lambda: self.abrir_formulario_mes(2))
+        self.btn_mes3.clicked.connect(lambda: self.abrir_formulario_mes(3))
+
+        botones_layout.addWidget(self.btn_mes1)
+        botones_layout.addWidget(self.btn_mes2)
+        botones_layout.addWidget(self.btn_mes3)
+
+        contenedor_layout.addLayout(botones_layout)
+
+        # Agregar contenedor al layout final
+        layout.addRow(contenedor)
+
+    def rellenar_tabla(self, mes, resultados):
+        col = mes  # mes1→1, mes2→2, mes3→3
+
+        mapping = [
+            ("SB", 0),
+            ("GT", 1),
+            ("THIMP", 2),
+            ("LOCMOV", 3),
+            ("THNI", 4),
+            ("DESC_LEGALES", 5),
+            ("DESC_VARIOS", 6),
+            ("ANTICIPO", 7),
+            ("LIQUIDO", 8)
+        ]
+
+        for clave, fila in mapping:
+            item = QTableWidgetItem(f"{resultados[clave]:,.0f}")
+            item.setTextAlignment(Qt.AlignCenter)
+            self.tbl_evaluacion.setItem(fila, col, item)
+
+    def abrir_formulario_mes(self, mes):
+        dlg = FormularioMes(mes, self)
+
+        if dlg.exec():
+            resultado = dlg.resultado_final   # ← ya trae todo
+
+            datos = resultado["datos"]
+            calculos = resultado["calculos"]
+
+            # Guardas lo que quieras
+            self.evaluacion_meses[mes] = datos
+
+            # Rellenas la tabla usando los cálculos
+            self.actualizar_tabla_evaluacion(mes, calculos)
+
+
+    def actualizar_tabla_evaluacion(self, mes, resultados):
+        col = mes  
+
+        mapping = [
+            ("sueldo_base", 0),
+            ("gratificacion", 1),
+            ("th_imponibles", 2),
+            ("locomocion", 3),
+            ("th_no_imponibles", 4),
+            ("descuentos_legales", 5),
+            ("descuentos_varios", 6),
+            ("anticipo", 7),
+            ("liquido", 8)
+        ]
+
+        for clave, fila in mapping:
+            valor = resultados.get(clave, 0)
+            item = QTableWidgetItem(f"{valor:,.0f}")
+            item.setTextAlignment(Qt.AlignCenter)
+            self.tbl_evaluacion.setItem(fila, col, item)
+
+                
             
 
         
@@ -408,6 +512,9 @@ class FormularioArriendo(QWidget):
         self.cmb_periodo_pago = QComboBox()
         self.cmb_periodo_pago.addItems(["Mensual", "Trimestral", "Anual"])
 
+        self.cmb_cuenta_fm = QComboBox()
+        self.cmb_periodo_pago.addItems(["1","2","3",4])
+
         self.txt_observaciones = QTextEdit()
 
         layout.addRow(self.crear_label("Fecha Inicio:", True), self.fecha_inicio)
@@ -419,36 +526,14 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Tipo de contrato:"), self.cmb_tipo_contrato)
         layout.addRow(self.crear_label("Forma de pago:"), self.txt_forma_pago)
         layout.addRow(self.crear_label("Periodo de pago"), self.cmb_periodo_pago)
+        layout.addRow(self.crear_label("Cuenta FM", self.cmb_cuenta_fm))
         layout.addRow(self.crear_label("Observaciones"), self.txt_observaciones)
 
         
 
 
 
-    def obtener_datos_evaluacion(self):
-        datos = []
-
-        conceptos = [
-            "sueldo_base",
-            "gratificacion",
-            "th_imponibles",
-            "locacion",
-            "th_no_imponibles",
-            "descuentos_legales",
-            "descuentos_varios",
-            "liquido"
-        ]
-
-        for fila, concepto in enumerate(conceptos):
-            fila_data = {
-                "concepto": concepto,
-                "mes1": self.tbl_evaluacion.item(fila, 1).text() if self.tbl_evaluacion.item(fila, 1) else "",
-                "mes2": self.tbl_evaluacion.item(fila, 2).text() if self.tbl_evaluacion.item(fila, 2) else "",
-                "mes3": self.tbl_evaluacion.item(fila, 3).text() if self.tbl_evaluacion.item(fila, 3) else "",
-            }
-            datos.append(fila_data)
-
-        return datos
+    
 
         
 
@@ -630,3 +715,213 @@ class FormularioArriendo(QWidget):
             QMessageBox.warning(self, "RUT inválido", "El RUT del arrendatario no es válido")
             return False
     
+
+class FormularioMes(QDialog):
+    def __init__(self, numero_mes, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Evaluación - Mes {numero_mes}")
+        self.resize(600, 500)
+
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+
+        # ---- CAMPOS FIJOS ----
+        self.sueldo_base = QLineEdit()
+        self.horas_extras = QLineEdit()
+        self.afp = QLineEdit()
+        self.salud = QLineEdit()
+        self.cesantia = QLineEdit()
+        self.bono1 = QLineEdit()
+        self.bono2 = QLineEdit()
+        self.bono3 = QLineEdit()
+        self.colacion = QLineEdit()
+        self.locomocion = QLineEdit()
+        self.cargas_familiares = QLineEdit()
+        self.viaticos = QLineEdit()
+        self.herramientas = QLineEdit()
+        self.anticipo = QLineEdit()
+        self.otros = QLineEdit()
+        self.sueldo_minimo = QLineEdit()
+
+        form.addRow("Sueldo Base:", self.sueldo_base)
+        form.addRow("Horas Extras:", self.horas_extras)
+        form.addRow("AFP:", self.afp)
+        form.addRow("Salud:", self.salud)
+        form.addRow("Cesantía:", self.cesantia)
+        form.addRow("Bono 1:", self.bono1)
+        form.addRow("Bono 2:", self.bono2)
+        form.addRow("Bono 3:", self.bono3)
+        form.addRow("Colación:", self.colacion)
+        form.addRow("Locomoción:", self.locomocion)
+        form.addRow("Cargas Familiares:", self.cargas_familiares)
+        form.addRow("Anticipo:", self.anticipo)
+        form.addRow("Viáticos:", self.viaticos)
+        form.addRow("Herramientas:", self.herramientas)
+        form.addRow("Sueldo minimo:", self.sueldo_minimo)
+
+        layout.addLayout(form)
+
+        # ---- TABLA DE OTROS DESCUENTOS ----
+        layout.addWidget(QLabel("Otros Descuentos:"))
+
+        self.tbl_descuentos = QTableWidget()
+        self.tbl_descuentos.setColumnCount(2)
+        self.tbl_descuentos.setHorizontalHeaderLabels(["Concepto", "Monto"])
+        self.tbl_descuentos.horizontalHeader().setStretchLastSection(True)
+
+        layout.addWidget(self.tbl_descuentos)
+
+        # Botones para manejar descuentos
+        btns = QHBoxLayout()
+        btn_add = QPushButton("Agregar descuento")
+        btn_del = QPushButton("Eliminar seleccionado")
+
+        btn_add.clicked.connect(self.agregar_descuento)
+        btn_del.clicked.connect(self.eliminar_descuento)
+
+        btns.addWidget(btn_add)
+        btns.addWidget(btn_del)
+
+        layout.addLayout(btns)
+
+        # Botones OK / Cancel
+        botones = QHBoxLayout()
+        btn_ok = QPushButton("Aceptar")
+        btn_cancel = QPushButton("Cancelar")
+
+        btn_ok.clicked.connect(self.aceptar)
+        btn_cancel.clicked.connect(self.reject)
+
+        botones.addWidget(btn_ok)
+        botones.addWidget(btn_cancel)
+
+        layout.addLayout(botones)
+
+
+
+    # ---------- Obtener datos para procesarlos ----------
+    def obtener_datos(self):
+        descuentos = []
+        for i in range(self.tbl_descuentos.rowCount()):
+            item_concepto = self.tbl_descuentos.item(i, 0)
+            item_monto = self.tbl_descuentos.item(i, 1)
+
+            if item_concepto is None or item_monto is None:
+                continue
+
+            concepto = item_concepto.text().strip()
+            if not concepto:
+                continue
+
+            try:
+                monto = float(item_monto.text() or 0)
+            except:
+                monto = 0
+
+            descuentos.append({"nombre": concepto, "monto": monto})
+
+        return {
+            "sueldo_base": float(self.sueldo_base.text() or 0),
+            "horas_extras": float(self.horas_extras.text() or 0),
+            "afp": float(self.afp.text() or 0),
+            "salud": float(self.salud.text() or 0),
+            "cesantia": float(self.cesantia.text() or 0),
+            "bono1": float(self.bono1.text() or 0),
+            "bono2": float(self.bono2.text() or 0),
+            "bono3": float(self.bono3.text() or 0),
+            "colacion": float(self.colacion.text() or 0),
+            "locomocion": float(self.locomocion.text() or 0),
+            "viaticos": float(self.viaticos.text() or 0),
+            "herramientas": float(self.herramientas.text() or 0),
+            "otros": float(self.otros.text() or 0) if hasattr(self, "otros") else 0,
+            "anticipo": float(self.anticipo.text() or 0) if hasattr(self, "anticipo") else 0,
+            "cargas_familiares": float(self.cargas_familiares.text() or 0),
+
+            # ⚠ IMPORTANTE: debes tener un input para sueldo mínimo
+            "sueldo_minimo": float(self.sueldo_minimo.text() or 0),
+
+            # Descuentos varios
+            "descuentos_varios": descuentos
+        }
+
+    
+    def agregar_descuento(self):
+        row = self.tbl_descuentos.rowCount()
+        self.tbl_descuentos.insertRow(row)
+        self.tbl_descuentos.setItem(row, 0, QTableWidgetItem(""))
+        self.tbl_descuentos.setItem(row, 1, QTableWidgetItem("0"))
+
+    # ---------- Función para eliminar un descuento ----------
+    def eliminar_descuento(self):
+        row = self.tbl_descuentos.currentRow()
+        if row >= 0:
+            self.tbl_descuentos.removeRow(row)
+
+    # ---------- Obtener datos para procesarlos ----------
+    def calcular_totales_mes(self, datos):
+
+        # 1) Tope legal gratificación
+        tope_grat = datos["sueldo_minimo"] * 4.75 / 12
+
+        # 2) Gratificación (25% SB topado)
+        gratificacion = min(datos["sueldo_base"] * 0.25, tope_grat)
+
+        # 3) Total imponible
+        th_imponibles = (
+            datos["sueldo_base"]
+            + gratificacion
+            + datos["bono1"]
+            + datos["bono2"]
+            + datos["bono3"]
+            + datos["horas_extras"]
+        )
+
+        # 4) Total no imponible
+        th_no_imponibles = (
+            datos["colacion"]
+            + datos["locomocion"]
+            + datos["viaticos"]
+            + datos["herramientas"]
+            + datos["otros"]
+        )
+
+        # 5) Total haberes
+        total_haberes = th_imponibles + th_no_imponibles
+
+        # 6) Descuentos legales
+        descuentos_legales = datos["afp"] + datos["salud"] + datos["cesantia"]
+
+        # 7) Descuentos varios
+        descuentos_varios_total = sum(d["monto"] for d in datos.get("descuentos_varios", []))
+
+        # 8) Anticipo
+        anticipo = datos.get("anticipo", 0)
+
+        # 9) Líquido a pago
+        liquido = total_haberes - descuentos_legales - descuentos_varios_total - anticipo
+
+        return {
+            "tope_gratificacion": tope_grat,
+            "gratificacion": gratificacion,
+            "th_imponibles": th_imponibles,
+            "th_no_imponibles": th_no_imponibles,
+            "total_haberes": total_haberes,
+            "descuentos_legales": descuentos_legales,
+            "descuentos_varios": descuentos_varios_total,
+            "anticipo": anticipo,
+            "liquido": liquido
+        }
+    
+
+    def aceptar(self):
+        datos = self.obtener_datos()
+        resultados = self.calcular_totales_mes(datos)
+
+        # Guardamos ambos: datos originales + cálculos
+        self.resultado_final = {
+            "datos": datos,
+            "calculos": resultados
+        }
+
+        self.accept()
