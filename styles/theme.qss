@@ -1,2 +1,116 @@
 /* === THEME GLOBAL PARA CORREDORA === */
 
+/* ==========================================================
+   TEMA GLOBAL OSCURO - SOFTWARE CORREDORA
+   Elegante, corporativo, sobrio
+   ========================================================== */
+
+/* ----- COLOR BASE ----- */
+QWidget {
+    background-color: #1E1E1E;
+    color: #E0E0E0;
+    font-family: "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+}
+
+/* ----- LABELS ----- */
+QLabel {
+    color: #E0E0E0;
+}
+
+/* ----- BOTONES ----- */
+QPushButton {
+    background-color: #2A2A2A;
+    border: 1px solid #3A3A3A;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: #E0E0E0;
+}
+QPushButton:hover {
+    background-color: #00ACC1;
+    border-color: #00ACC1;
+}
+QPushButton:pressed {
+    background-color: #007F8A;
+}
+
+/* ----- CAMPOS DE TEXTO ----- */
+QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox, QTextEdit {
+    background-color: #2A2A2A;
+    border: 1px solid #3A3A3A;
+    border-radius: 4px;
+    padding: 4px;
+    color: #E0E0E0;
+}
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus {
+    border: 1px solid #0097A7;
+}
+
+/* ----- TABLAS ----- */
+QTableWidget, QTableView {
+    background-color: #2A2A2A;
+    gridline-color: #3A3A3A;
+    border: 1px solid #3A3A3A;
+}
+
+QHeaderView::section {
+    background-color: #1E1E1E;
+    color: #E0E0E0;
+    border: 1px solid #3A3A3A;
+    padding: 4px;
+}
+
+/* ----- TABS ----- */
+QTabWidget::pane {
+    border: 1px solid #3A3A3A;
+    background: #1E1E1E;
+}
+
+QTabBar::tab {
+    background: #2A2A2A;
+    color: #E0E0E0;
+    padding: 6px 12px;
+    margin-right: 2px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+QTabBar::tab:selected {
+    background: #0097A7;
+    color: white;
+}
+
+QTabBar::tab:hover {
+    background: #00ACC1;
+}
+
+/* ----- SCROLLBARS ----- */
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #1E1E1E;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle {
+    background: #3A3A3A;
+    min-height: 20px;
+}
+
+QScrollBar::handle:hover {
+    background: #4A4A4A;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    background: none;
+    border: none;
+}
+
+/* ----- QDialog ----- */
+QDialog {
+    background-color: #1E1E1E;
+}
+
+/* ----- MESSAGE BOX ----- */
+QMessageBox {
+    background-color: #1E1E1E;
+}

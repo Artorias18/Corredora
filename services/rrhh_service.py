@@ -1,264 +1,375 @@
-# services/rrhh_service.py
+# ===============================
+#        RRHH SERVICE
+# ===============================
 
 from services.supabase_client import supabase
 from datetime import date
+import traceback
 
-# =========================================================================================
-#   UTILIDADES INTERNAS
-# =========================================================================================
 
-def _get_single(data):
-    """Convierte la respuesta Supabase en un dict manejable."""
-    if not data or not isinstance(data, list):
+# ---------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------
+
+def _exec(query):
+    """Ejecuta una consulta Supabase y maneja errores."""
+    try:
+        response = query.execute()
+        return response.data
+    except Exception as e:
+        print("❌ Supabase Error:", e)
+        traceback.print_exc()
         return None
-    return data[0] if data else None
 
 
-# =========================================================================================
-#   OBTENER DATOS MAESTROS (AFP, SALUD, TRABAJADORES)
-# =========================================================================================
-
-def obtener_afps():
-    """Devuelve la lista completa de AFPs."""
-    try:
-        res = supabase.table("afp").select("id, nombre").order("nombre").execute()
-        return res.data or []
-    except Exception as e:
-        print("Error obtener_afps:", e)
-        return []
-
-
-def obtener_sistemas_salud():
-    """Lista Fonasa / Isapres."""
-    try:
-        res = supabase.table("sistema_salud").select("id, nombre, tipo").order("nombre").execute()
-        return res.data or []
-    except Exception as e:
-        print("Error obtener_sistemas_salud:", e)
-        return []
-
+# =========================================================
+#  TRABAJADORES
+# =========================================================
 
 def obtener_trabajadores():
     """Lista todos los trabajadores."""
     try:
-        res = supabase.table("trabajador").select("*").order("nombre").execute()
-        return res.data or []
+        return _exec(
+            supabase.table("trabajador")
+            .select("*")
+            .order("nombre", desc=False)
+        ) or []
     except Exception as e:
         print("Error obtener_trabajadores:", e)
         return []
 
 
 def crear_trabajador(data):
-    """Crea un trabajador."""
+    """Inserta un trabajador nuevo."""
     try:
-        res = supabase.table("trabajador").insert(data).execute()
-        return res.data
+        data.setdefault("created_at", date.today().isoformat())
+        return _exec(
+            supabase.table("trabajador")
+            .insert(data)
+        )
     except Exception as e:
         print("Error crear_trabajador:", e)
         return None
 
 
 def actualizar_trabajador(rut, data):
-    """Actualiza los datos de un trabajador."""
+    """Actualiza datos de un trabajador."""
     try:
-        res = supabase.table("trabajador").update(data).eq("rut", rut).execute()
-        return res.data
+        return _exec(
+            supabase.table("trabajador")
+            .update(data)
+            .eq("rut", rut)
+        )
     except Exception as e:
         print("Error actualizar_trabajador:", e)
         return None
 
 
 def eliminar_trabajador(rut):
-    """Elimina trabajador y liquidaciones asociadas por CASCADE."""
+    """Elimina trabajador completo."""
     try:
-        supabase.table("trabajador").delete().eq("rut", rut).execute()
+        _exec(
+            supabase.table("trabajador")
+            .delete()
+            .eq("rut", rut)
+        )
         return True
     except Exception as e:
         print("Error eliminar_trabajador:", e)
         return False
 
 
-# =========================================================================================
-#   CONSULTAS A LA BD PARA CÁLCULOS
-# =========================================================================================
+# =========================================================
+#  AFP / SALUD
+# =========================================================
 
-def obtener_tasa_afp(afp_id, fecha=date.today()):
-    """
-    Llama a la función RPC que devuelve:
-       - tasa_cotizacion
-       - tasa_sis
-    """
+def obtener_afps():
+    """Lista AFP disponibles."""
     try:
-        res = supabase.rpc(
-            "obtener_tasa_afp",
-            {"p_afp_id": afp_id, "p_fecha": fecha.isoformat()}
-        ).execute()
-        return _get_single(res.data)
-    except Exception as e:
-        print("Error obtener_tasa_afp:", e)
-        return None
-
-
-def obtener_tasa_salud(salud_id, fecha=date.today()):
-    """
-    Llama a obtener_tasa_salud y retorna:
-       - porcentaje_base
-       - plan_fijo (si corresponde)
-    """
-    try:
-        res = supabase.rpc(
-            "obtener_tasa_salud",
-            {"p_salud_id": salud_id, "p_fecha": fecha.isoformat()}
-        ).execute()
-        return _get_single(res.data)
-    except Exception as e:
-        print("Error obtener_tasa_salud:", e)
-        return None
-
-
-def calcular_asignacion_familiar(imponible, cargas):
-    """Invoca la función RPC de asignación familiar."""
-    try:
-        res = supabase.rpc(
-            "calcular_asignacion_familiar",
-            {"p_imponible": imponible, "p_cargas": cargas}
-        ).execute()
-        return res.data if res.data is not None else 0
-    except Exception as e:
-        print("Error calcular_asignacion_familiar:", e)
-        return 0
-
-
-# =========================================================================================
-#   CÁLCULO DE LIQUIDACIÓN
-# =========================================================================================
-
-def calcular_liquidacion(datos, trabajador):
-    """
-    Calcula imponibles, no imponibles, descuentos y líquido a pagar.
-    Usa AFP, salud y asignación familiar desde BD.
-    """
-
-    imponibles = sum([
-        datos.get("sueldo_base", 0),
-        datos.get("gratificacion", 0),
-        datos.get("horas_extras", 0),
-        datos.get("bonos", 0),
-    ])
-
-    no_imponibles = sum([
-        datos.get("colacion", 0),
-        datos.get("movilizacion", 0),
-    ])
-
-    # === Monto AFP ===
-    afp_data = obtener_tasa_afp(trabajador["afp_id"])
-    afp_monto = imponibles * afp_data["tasa"] if afp_data else 0
-
-    # === Monto Salud ===
-    salud_data = obtener_tasa_salud(trabajador["salud_id"])
-    salud_monto = imponibles * salud_data["porcentaje"] if salud_data else 0
-
-    # === Asignación familiar ===
-    asig_familiar = calcular_asignacion_familiar(
-        imponibles,
-        trabajador.get("cargas_familiares", 0)
-    )
-    no_imponibles += asig_familiar  # se suma al total no imponible
-
-    descuentos = afp_monto + salud_monto + datos.get("otros_descuentos", 0)
-
-    liquido = imponibles + no_imponibles - descuentos
-
-    return {
-        "imponibles": imponibles,
-        "no_imponibles": no_imponibles,
-        "afp_monto": afp_monto,
-        "salud_monto": salud_monto,
-        "asignacion_familiar": asig_familiar,
-        "otros_descuentos": datos.get("otros_descuentos", 0),
-        "total_descuentos": descuentos,
-        "liquido_pagar": liquido,
-    }
-
-
-# =========================================================================================
-#   CRUD LIQUIDACIONES
-# =========================================================================================
-
-def obtener_liquidaciones():
-    """Devuelve las liquidaciones existentes."""
-    try:
-        res = supabase.table("liquidacion_rrhh")\
-            .select("*")\
-            .order("fecha_emision", desc=True)\
-            .execute()
-        return res.data or []
-    except Exception as e:
-        print("Error obtener_liquidaciones:", e)
+        return _exec(
+            supabase.table("afp")
+            .select("id,nombre")
+            .order("nombre", desc=False)
+        ) or []
+    except:
+        print("Error obtener_afps")
         return []
+
+
+def obtener_sistemas_salud():
+    """Lista sistemas de salud disponibles."""
+    try:
+        return _exec(
+            supabase.table("sistema_salud")
+            .select("id,nombre,tipo")
+            .order("nombre", desc=False)
+        ) or []
+    except:
+        print("Error obtener_sistemas_salud")
+        return []
+
+
+def obtener_tasa_afp(afp_id, fecha=None):
+    fecha = fecha or date.today().isoformat()
+    data = _exec(
+        supabase.rpc("obtener_tasa_afp", {"p_afp_id": afp_id, "p_fecha": fecha})
+    )
+    return data[0] if data else {"tasa": 0, "seguro_invalidez": 0}
+
+
+def obtener_tasa_salud(salud_id, fecha=None):
+    fecha = fecha or date.today().isoformat()
+    data = _exec(
+        supabase.rpc("obtener_tasa_salud", {"p_salud_id": salud_id, "p_fecha": fecha})
+    )
+    return data[0] if data else {"porcentaje": 0, "plan_fijo": 0}
+
+
+def calcular_asignacion_familiar(monto_imponible, cargas):
+    data = _exec(
+        supabase.rpc(
+            "calcular_asignacion_familiar",
+            {"p_imponible": monto_imponible, "p_cargas": cargas}
+        )
+    )
+    return data if data else 0
+
+
+# =========================================================
+#  CONCEPTOS
+# =========================================================
+
+def obtener_conceptos():
+    """Retorna todos los conceptos, ordenados para mostrarse en el GUI."""
+    return _exec(
+        supabase.table("concepto")
+        .select("*")
+        .order("grupo", desc=False)
+        .order("orden", desc=False)
+    ) or []
+
+
+def obtener_conceptos_agrupados():
+    """Retorna diccionario: grupo → lista de conceptos."""
+    conceptos = obtener_conceptos()
+    agrupado = {"haber_imponible": [], "haber_no_imponible": [],
+                "descuento_previsional": [], "descuento_otro": []}
+
+    for c in conceptos:
+        agrupado[c["grupo"]].append(c)
+
+    return agrupado
+
+
+# =========================================================
+#  LIQUIDACIONES
+# =========================================================
+
+def obtener_liquidaciones_resumen():
+    """Llama al RPC que devuelve resumen."""
+    try:
+        return _exec(
+            supabase.rpc("obtener_liquidaciones_resumen")
+        ) or []
+    except:
+        print("Error obtener_liquidaciones_resumen")
+        return []
+
+
+def obtener_liquidacion(liquidacion_id):
+    """Obtiene datos completos de una liquidación."""
+    try:
+        data = _exec(
+            supabase.table("liquidacion")
+            .select("*")
+            .eq("id", liquidacion_id)
+        )
+        return data[0] if data else None
+    except:
+        print("Error obtener_liquidacion")
+        return None
 
 
 def obtener_detalle_liquidacion(liquidacion_id):
-    """Devuelve los ítems de una liquidación."""
+    """Lista detalle por concepto."""
     try:
-        res = supabase.table("liquidacion_detalle_rrhh")\
-            .select("*")\
-            .eq("liquidacion_id", liquidacion_id)\
-            .execute()
-        return res.data or []
-    except Exception as e:
-        print("Error obtener_detalle_liquidacion:", e)
+        return _exec(
+            supabase.table("liquidacion_detalle")
+            .select("*, concepto(nombre,grupo)")
+            .eq("liquidacion_id", liquidacion_id)
+            .order("id", desc=False)
+        ) or []
+    except:
+        print("Error obtener_detalle_liquidacion")
         return []
 
 
-def crear_liquidacion(cabecera, detalles):
-    """Inserta la liquidación completa usando CASCADE."""
-    try:
-        cabecera.setdefault("fecha_emision", date.today().isoformat())
+# =========================================================
+#  CREAR LIQUIDACIÓN COMPLETA
+# =========================================================
 
-        # Insertar cabecera
-        res = supabase.table("liquidacion_rrhh").insert(cabecera).execute()
-        if not res.data:
-            print("Error creando cabecera")
+def crear_liquidacion(cabecera, detalles):
+    """
+    Crea la liquidación:
+      1) snapshot AFP / Salud
+      2) inserta cabecera
+      3) inserta detalle
+      4) recalcula totales vía RPC
+    """
+    try:
+        rut = cabecera["trabajador_rut"]
+        trabajador = obtener_trabajador_por_rut(rut)
+
+        if not trabajador:
+            print("❌ Trabajador no encontrado")
             return None
 
-        liquidacion_id = res.data[0]["id"]
+        # 1. SNAPSHOT AFP
+        afp_info = obtener_tasa_afp(trabajador["afp_id"])
+        cabecera["afp_id"] = trabajador["afp_id"]
+        cabecera["afp_nombre"] = trabajador["afp_id"] and _buscar_afp_nombre(trabajador["afp_id"])
+        cabecera["afp_tasa"] = afp_info.get("tasa", 0)
 
-        # Insertar detalles
+        # 2. SNAPSHOT SALUD
+        salud_info = obtener_tasa_salud(trabajador["sistema_salud_id"])
+        cabecera["sistema_salud_id"] = trabajador["sistema_salud_id"]
+        cabecera["sistema_salud_nombre"] = trabajador["sistema_salud_id"] and _buscar_salud_nombre(trabajador["sistema_salud_id"])
+        cabecera["porcentaje_salud"] = salud_info.get("porcentaje", 0)
+
+        cabecera.setdefault("fecha_emision", date.today().isoformat())
+
+        # 3. Insertamos cabecera
+        resp = _exec(
+            supabase.table("liquidacion").insert(cabecera)
+        )
+
+        if not resp:
+            return None
+
+        liquidacion_id = resp[0]["id"]
+
+        # 4. Insertamos detalle
         for d in detalles:
             d["liquidacion_id"] = liquidacion_id
-        supabase.table("liquidacion_detalle_rrhh").insert(detalles).execute()
+
+        _exec(
+            supabase.table("liquidacion_detalle").insert(detalles)
+        )
+
+        # 5. Recalcular totales
+        _exec(
+            supabase.rpc("calcular_totales_liquidacion",
+                         {"p_liquidacion_id": liquidacion_id})
+        )
 
         return liquidacion_id
 
     except Exception as e:
         print("Error crear_liquidacion:", e)
+        traceback.print_exc()
         return None
 
 
-def eliminar_liquidacion(liquidacion_id):
-    """Elimina una liquidación específica."""
-    try:
-        supabase.table("liquidacion_rrhh").delete().eq("id", liquidacion_id).execute()
-        return True
-    except Exception as e:
-        print("Error eliminar_liquidacion:", e)
-        return False
-
+# =========================================================
+#  ACTUALIZAR LIQUIDACIÓN
+# =========================================================
 
 def actualizar_liquidacion(liquidacion_id, cabecera, detalles):
-    """Actualiza la cabecera y reemplaza los detalles."""
     try:
-        supabase.table("liquidacion_rrhh").update(cabecera).eq("id", liquidacion_id).execute()
-        supabase.table("liquidacion_detalle_rrhh").delete().eq("liquidacion_id", liquidacion_id).execute()
+        # actualizar cabecera
+        _exec(
+            supabase.table("liquidacion")
+            .update(cabecera)
+            .eq("id", liquidacion_id)
+        )
 
+        # borrar detalle viejo
+        _exec(
+            supabase.table("liquidacion_detalle")
+            .delete()
+            .eq("liquidacion_id", liquidacion_id)
+        )
+
+        # insertar detalle nuevo
         for d in detalles:
             d["liquidacion_id"] = liquidacion_id
-        supabase.table("liquidacion_detalle_rrhh").insert(detalles).execute()
 
+        _exec(
+            supabase.table("liquidacion_detalle")
+            .insert(detalles)
+        )
+
+        # recalcular totales
+        _exec(
+            supabase.rpc("calcular_totales_liquidacion",
+                         {"p_liquidacion_id": liquidacion_id})
+        )
         return True
 
     except Exception as e:
         print("Error actualizar_liquidacion:", e)
         return False
+
+
+# =========================================================
+#  ELIMINAR LIQUIDACIÓN
+# =========================================================
+
+def eliminar_liquidacion(liquidacion_id):
+    try:
+        _exec(
+            supabase.table("liquidacion")
+            .delete()
+            .eq("id", liquidacion_id)
+        )
+        return True
+    except:
+        return False
+
+
+# =========================================================
+#  HELPERS SECUNDARIOS
+# =========================================================
+
+def obtener_trabajador_por_rut(rut):
+    data = _exec(
+        supabase.table("trabajador")
+        .select("*")
+        .eq("rut", rut)
+    )
+    return data[0] if data else None
+
+
+def _buscar_afp_nombre(afp_id):
+    data = _exec(
+        supabase.table("afp")
+        .select("nombre")
+        .eq("id", afp_id)
+    )
+    return data[0]["nombre"] if data else None
+
+
+def _buscar_salud_nombre(salud_id):
+    data = _exec(
+        supabase.table("sistema_salud")
+        .select("nombre")
+        .eq("id", salud_id)
+    )
+    return data[0]["nombre"] if data else None
+
+
+
+
+
+# =============================================
+# COMPATIBILIDAD TEMPORAL CON EL GUI ANTIGUO
+# =============================================
+
+def obtener_trabajador(rut):
+    """Compatibilidad con el GUI antiguo."""
+    return obtener_trabajador_por_rut(rut)
+
+
+def obtener_liquidaciones():
+    """El GUI antiguo llamaba esta función."""
+    return obtener_liquidaciones_resumen()
