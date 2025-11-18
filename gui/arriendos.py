@@ -256,22 +256,8 @@ class FormularioArriendo(QWidget):
         self.txt_arrendatario_direccion = QLineEdit()
         self.txt_arrendatario_telefono = QLineEdit()
         self.txt_arrendatario_email = QLineEdit()
-        self.txt_sueldo_base = QLineEdit()
-        self.txt_horas_extras = QLineEdit()
-        self.txt_afp = QLineEdit()
-        self.txt_salud = QLineEdit()
-        self.txt_cesantia = QLineEdit()
         self.cmb_tipo_trabajador = QComboBox()
         self.cmb_tipo_trabajador.addItems(["Dependiente", "Independiente", "Otro"])
-        self.txt_bono_1 = QLineEdit()
-        self.txt_bono_2 = QLineEdit()
-        self.txt_bono_3 = QLineEdit()
-        self.txt_colacion = QLineEdit()
-        self.txt_locomocion = QLineEdit()
-        self.txt_cargas_familiares = QLineEdit()
-        self.txt_viaticos = QLineEdit()
-        self.txt_herramientas = QLineEdit()
-        self.txt_otros = QLineEdit()
         self.txt_antiguedad_laboral = QLineEdit()
         self.cmb_dicom = QComboBox()
         self.cmb_dicom.addItems(["Si","No"])
@@ -295,20 +281,6 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Email:"), self.txt_arrendatario_email)
         
         layout.addRow(self.crear_label("Tipo de Trabajador:"), self.cmb_tipo_trabajador)
-        layout.addRow(self.crear_label("Sueldo Base:"), self.txt_sueldo_base)
-        layout.addRow(self.crear_label("Horas Extras:"), self.txt_horas_extras)
-        layout.addRow(self.crear_label("AFP:"), self.txt_afp)
-        layout.addRow(self.crear_label("Salud:"), self.txt_salud)
-        layout.addRow(self.crear_label("Cesantía:"), self.txt_cesantia)
-        layout.addRow(self.crear_label("Bono 1:"), self.txt_bono_1)
-        layout.addRow(self.crear_label("Bono 2:"), self.txt_bono_2)
-        layout.addRow(self.crear_label("Bono 3:"), self.txt_bono_3)
-        layout.addRow(self.crear_label("Colación:"), self.txt_colacion)
-        layout.addRow(self.crear_label("Locomoción:"), self.txt_locomocion)
-        layout.addRow(self.crear_label("Cargas Familiares:"), self.txt_cargas_familiares)
-        layout.addRow(self.crear_label("Viáticos:"), self.txt_viaticos)
-        layout.addRow(self.crear_label("Herramientas:"), self.txt_herramientas)
-        layout.addRow(self.crear_label("Otros:"), self.txt_otros)
         layout.addRow(self.crear_label("Antigüedad Laboral (meses):"), self.txt_antiguedad_laboral)
 
         # --- Evaluación ---
@@ -354,6 +326,12 @@ class FormularioArriendo(QWidget):
         contenedor_layout.setAlignment(Qt.AlignCenter)
 
         # Crear tabla
+
+        self.fecha_evaluacion_arrendatario = QDateEdit(QDate.currentDate())
+        self.fecha_evaluacion_arrendatario.setCalendarPopup(True)
+
+        layout.addRow(self.crear_label("Fecha Evaluación:"), self.fecha_evaluacion_arrendatario)
+
         self.tbl_evaluacion = QTableWidget()
         self.tbl_evaluacion.setRowCount(9)
         self.tbl_evaluacion.setColumnCount(4)
@@ -422,25 +400,6 @@ class FormularioArriendo(QWidget):
         # Agregar contenedor al layout final
         layout.addRow(contenedor)
 
-    def rellenar_tabla(self, mes, resultados):
-        col = mes  # mes1→1, mes2→2, mes3→3
-
-        mapping = [
-            ("SB", 0),
-            ("GT", 1),
-            ("THIMP", 2),
-            ("LOCMOV", 3),
-            ("THNI", 4),
-            ("DESC_LEGALES", 5),
-            ("DESC_VARIOS", 6),
-            ("ANTICIPO", 7),
-            ("LIQUIDO", 8)
-        ]
-
-        for clave, fila in mapping:
-            item = QTableWidgetItem(f"{resultados[clave]:,.0f}")
-            item.setTextAlignment(Qt.AlignCenter)
-            self.tbl_evaluacion.setItem(fila, col, item)
 
     def abrir_formulario_mes(self, mes):
         dlg = FormularioMes(mes, self)
@@ -455,11 +414,15 @@ class FormularioArriendo(QWidget):
             self.evaluacion_meses[mes] = datos
 
             # Rellenas la tabla usando los cálculos
-            self.actualizar_tabla_evaluacion(mes, calculos)
+            resultados_completos = {**datos, **calculos}
+
+            self.actualizar_tabla_evaluacion(mes, resultados_completos)
 
 
     def actualizar_tabla_evaluacion(self, mes, resultados):
         col = mes  
+
+        print("CALCULOS MES:", resultados)
 
         mapping = [
             ("sueldo_base", 0),
@@ -478,6 +441,41 @@ class FormularioArriendo(QWidget):
             item = QTableWidgetItem(f"{valor:,.0f}")
             item.setTextAlignment(Qt.AlignCenter)
             self.tbl_evaluacion.setItem(fila, col, item)
+
+    
+    def obtener_diccionario_evaluacion(self):
+        col = self.tbl_evaluacion.columnCount() - 1
+
+        mapping = [
+            "sueldo_base",
+            "gratificacion",
+            "total_imponible",
+            "locomocion",
+            "total_no_imponible",
+            "descuentos_legales",
+            "desc_varios",
+            "anticipo",
+            "liquido_pago"
+        ]
+
+        datos = {}
+
+        for fila, clave in enumerate(mapping):
+            item = self.tbl_evaluacion.item(fila, col)
+
+            if item and item.text().strip():
+                texto = item.text().replace(".", "").replace(",", "")
+                try:
+                    valor = float(texto)
+                except:
+                    valor = 0.0
+            else:
+                valor = 0.0
+
+            datos[clave] = valor
+
+        return datos
+
 
                 
             
@@ -547,6 +545,8 @@ class FormularioArriendo(QWidget):
 
     def guardar_arriendo(self):
         try:
+            valores_tabla = self.obtener_diccionario_evaluacion()
+
             data_arriendo = {
                 
                 'propiedad':{
@@ -571,31 +571,29 @@ class FormularioArriendo(QWidget):
                     'telefono': self.txt_arrendatario_telefono.text(),
                     'email': self.txt_arrendatario_email.text(),
                     'direccion': self.txt_arrendatario_direccion.text(),
-                    'sueldo_base': self.txt_sueldo_base.text(),
-                    'horas_extras': self.txt_horas_extras.text(),
-                    'afp': self.txt_afp.text(),
-                    'salud': self.txt_salud.text(),
-                    'cesantia': self.txt_cesantia.text(),
                     'tipo_trabajador': self.cmb_tipo_trabajador.currentText(),
-                    'bono1': self.txt_bono_1.text(),
-                    'bono2': self.txt_bono_2.text(),
-                    'bono3': self.txt_bono_3.text(),
-                    'colacion': self.txt_colacion.text(),
-                    'locomocion': self.txt_locomocion.text(),
-                    'cargas_familiares': self.txt_cargas_familiares.text(),
-                    'viaticos': self.txt_viaticos.text(),
-                    'herramientas': self.txt_herramientas.text(),
-                    'otros': self.txt_otros.text(),
-                    'antiguedad_laboral': self.txt_antiguedad_laboral.text(),
                     'dicom': self.cmb_dicom.currentText(),
                     'comentarios': self.txt_comentarios.toPlainText(),
                     'evaluacion_estado': self.cmb_evaluacion_estado.currentText(),
+                    'antiguedad_laboral': self.txt_antiguedad_laboral.text(),
                     'fecha_evaluacion': self.fecha_evaluacion.date().toString("yyyy-MM-dd"),
-                    'renta': self.txt_renta
+                    'renta': self.txt_renta.text()
 
                 },
 
                 'evaluacion_arrendatario':{
+                    'fecha_evaluacion': self.fecha_evaluacion_arrendatario.date().toString("yyyy-MM-dd"),
+                    'sueldo_base': valores_tabla.get('sueldo_base', 0),
+                    'gratificacion': valores_tabla.get('gratificacion', 0),
+                    'total_imponible': valores_tabla.get('total_imponible', 0),
+                    'total_no_imponible': valores_tabla.get('total_no_imponible', 0),
+                    'descuentos_legales': valores_tabla.get('descuentos_legales', 0),
+                    'liquido_pago': valores_tabla.get('liquido_pago', 0),
+                    'anticipo': valores_tabla.get('anticipo', 0),
+                    'desc_varios': valores_tabla.get('desc_varios', 0),
+                    'locomocion': valores_tabla.get('locomocion', 0)
+
+
 
                 },
                 

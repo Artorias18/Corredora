@@ -34,9 +34,9 @@ def guardar_arriendo(data_arriendo):
         if not data_arriendo.get('propiedad',{}).get('codigo'):
             raise ValueError("El código de la propiedad es obligatorio")
         if not data_arriendo.get('arrendador', {}).get('rut'):
-                raise ValueError("El RUT del comprador es obligatorio para ventas cerradas")
+                raise ValueError("El RUT del arrendador es obligatorio para ventas cerradas")
         if not data_arriendo.get('arrendatario', {}).get('rut'):
-                raise ValueError("El RUT del vendedor es obligatorio para ventas cerradas")
+                raise ValueError("El RUT del arrendatario es obligatorio para ventas cerradas")
         
 
         propiedad_data = {
@@ -59,7 +59,7 @@ def guardar_arriendo(data_arriendo):
         }
 
         supabase.table("arrendador").upsert(arrendador_data,
-                                            on_conflict= "rut").execute()
+                                            ).execute()
         
         arrendatario_data = {
                  'rut': data_arriendo['arrendatario']['rut'] ,
@@ -67,46 +67,42 @@ def guardar_arriendo(data_arriendo):
                  'telefono': data_arriendo['arrendatario']['telefono'] ,
                  'email': data_arriendo['arrendatario']['email'] ,
                  'direccion': data_arriendo['arrendatario']['direccion'],
-                 'sueldo_base': data_arriendo['arrendatario']['sueldo_base'],
-                 'horas_extras': data_arriendo['arrendatario']['horas_extras'],
-                 'afp': data_arriendo['arrendatario']['afp'],
-                 'salud': data_arriendo['arrendatario']['salud'],
-                 'cesantia': data_arriendo['arrendatario']['cesantia'],
                  'tipo_trabajador': data_arriendo['arrendatario']['tipo_trabajador'],
-                 'bono1': data_arriendo['arrendatario']['bono1'],
-                 'bono2': data_arriendo['arrendatario']['bono2'],
-                 'bono3': data_arriendo['arrendatario']['bono3'],
-                 'colacion': data_arriendo['arrendatario']['colacion'],
-                 'locomocion': data_arriendo['arrendatario']['locomocion'],
-                 'cargas_familiares': data_arriendo['arrendatario']['cargas_familiares'],
-                 'viaticos': data_arriendo['arrendatario']['viaticos'],
-                 'herramientas': data_arriendo['arrendatario']['herramientas'],
-                 'otros': data_arriendo['arrendatario']['otros'],
                  'antiguedad_laboral': data_arriendo['arrendatario']['antiguedad_laboral'],
                  'dicom': data_arriendo['arrendatario']['dicom'],
                  'comentarios': data_arriendo['arrendatario']['comentarios'],
                  'evaluacion_estado': data_arriendo['arrendatario']['evaluacion_estado'],
                  'fecha_evaluacion': data_arriendo['arrendatario']['fecha_evaluacion'],
-                 'renta': data_arriendo['arrendatario']['renta']
+                 'renta': float(data_arriendo['arrendatario']['renta'] or 0)
 
         }
     
         supabase.table("arrendatario").upsert(arrendatario_data, 
-                                              on_conflict= "rut").execute()
+                                              ).execute()
         
         evaluacion_arriendo_data = {
-             'rut': data_arriendo['arrendatario']['rut']
+             'rut': data_arriendo['arrendatario']['rut'],
+             'fecha_evaluacion': data_arriendo['evaluacion_arrendatario']['fecha_evaluacion'],
+             'sueldo_base': data_arriendo['evaluacion_arrendatario']['sueldo_base'],
+             'gratificacion': data_arriendo['evaluacion_arrendatario']['gratificacion'],
+             'total_imponible': data_arriendo['evaluacion_arrendatario']['total_imponible'],
+             'total_no_imponible': data_arriendo['evaluacion_arrendatario']['total_no_imponible'],
+             'descuentos_legales': data_arriendo['evaluacion_arrendatario']['descuentos_legales'],
+             'liquido_pago':data_arriendo['evaluacion_arrendatario']['liquido_pago'],
+             'anticipo': data_arriendo['evaluacion_arrendatario']['anticipo'],
+             'desc_varios': data_arriendo['evaluacion_arrendatario']['desc_varios'],
+             'locomocion': data_arriendo['evaluacion_arrendatario']['locomocion']
              
         }
 
         supabase.table("evaluacion_arriendo").upsert(evaluacion_arriendo_data,
-                                                     )
+                                                     ).execute()
 
 
         arriendo_data = {
              'codigo_interno': data_arriendo['propiedad']['codigo'],
-             'rut': data_arriendo['arrendador']['rut'],
-             'rut': data_arriendo['arrendatario']['rut'],
+             'rut_arrendador': data_arriendo['arrendador']['rut'],
+             'rut_arrendatario': data_arriendo['arrendatario']['rut'],
              'fecha_inicio':data_arriendo['arriendo']['fecha_inicio'] or None,
              'fecha_termino':data_arriendo['arriendo']['fecha_termino'] or None,
              'renta_mensual':data_arriendo['arriendo']['renta_mensual'],
@@ -136,6 +132,10 @@ def guardar_arriendo(data_arriendo):
 
 def obtener_detalle_arriendo():
     pass
+
+
+
+
 
 def obtener_arriendos_por_estado(estado):
     try:
