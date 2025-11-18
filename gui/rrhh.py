@@ -7,6 +7,9 @@ from PySide6.QtCore import Qt
 
 from services import rrhh_service
 import re
+import os
+from openpyxl import Workbook
+from PySide6.QtWidgets import QFileDialog
 
 
 # ====================================================
@@ -100,7 +103,12 @@ class DialogoTrabajador(QDialog):
         layout.addRow("Sueldo Base:", self.sueldo_base)
 
         # Botones
+        self.btn_exportar = QPushButton("Exportar a Excel")
+        self.btn_exportar.clicked.connect(self.exportar_excel)
+
         self.botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.botones.addButton(self.btn_exportar, QDialogButtonBox.ActionRole)
+
         self.botones.accepted.connect(self.validar_y_guardar)
         self.botones.rejected.connect(self.reject)
         layout.addWidget(self.botones)
@@ -247,6 +255,211 @@ class TabTrabajadores(QWidget):
 # ====================================================
 
 class DialogoLiquidacion(QDialog):
+
+
+
+    def exportar_excel(self):
+        """
+        Genera un Excel similar al ejemplo proporcionado.
+        Exporta todos los haberes, descuentos, totales y datos adicionales.
+        """
+        # --- Seleccionar ruta ---
+        ruta, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar liquidación",
+            f"Liquidacion_{self.periodo_edit.text()}_{self.lbl_rut.text()}.xlsx",
+            "Excel (*.xlsx)"
+        )
+        if not ruta:
+            return
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Liquidación"
+
+        fila = 1
+
+        # =======================
+        #   TITULO
+        # =======================
+        ws["A1"] = "LIQUIDACIÓN DE SUELDO"
+        fila += 2
+
+        # =======================
+        #   HABERES IMPONIBLES
+        # =======================
+        ws[f"A{fila}"] = "HABERES IMPONIBLES"
+        fila += 1
+
+        for cid, spin in self.campos_concepto.items():
+            info = self.info_concepto[cid]
+            if info["grupo"] == "haber_imponible":
+                ws[f"A{fila}"] = info["nombre"]
+                ws[f"B{fila}"] = int(spin.value())
+                fila += 1
+
+        fila += 1
+        ws[f"A{fila}"] = "TOTAL HABERES IMPONIBLES"
+        ws[f"B{fila}"] = int(self.lbl_total_hab_impon.text())
+        fila += 2
+
+        # =======================
+        #   HABERES NO IMPONIBLES
+        # =======================
+        ws[f"A{fila}"] = "HABERES NO IMPONIBLES"
+        fila += 1
+
+        for cid, spin in self.campos_concepto.items():
+            info = self.info_concepto[cid]
+            if info["grupo"] == "haber_no_imponible":
+                ws[f"A{fila}"] = info["nombre"]
+                ws[f"B{fila}"] = int(spin.value())
+                fila += 1
+
+        fila += 1
+        ws[f"A{fila}"] = "TOTAL HABERES NO IMPONIBLES"
+        ws[f"B{fila}"] = int(self.lbl_total_hab_no_impon.text())
+        fila += 2
+
+        # =======================
+        #   DESCUENTOS PREVISIONALES
+        # =======================
+        ws[f"A{fila}"] = "DESCUENTOS PREVISIONALES"
+        fila += 1
+
+        for cid, spin in self.campos_concepto.items():
+            info = self.info_concepto[cid]
+            if info["grupo"] == "descuento_previsional":
+                ws[f"A{fila}"] = info["nombre"]
+                ws[f"B{fila}"] = int(spin.value())
+                fila += 1
+
+        fila += 1
+        ws[f"A{fila}"] = "TOTAL DESCUENTOS PREVISIONALES"
+        ws[f"B{fila}"] = int(self.lbl_total_desc_prev.text())
+        fila += 2
+
+        # =======================
+        #   OTROS DESCUENTOS
+        # =======================
+        ws[f"A{fila}"] = "OTROS DESCUENTOS"
+        fila += 1
+
+        for cid, spin in self.campos_concepto.items():
+            info = self.info_concepto[cid]
+            if info["grupo"] == "descuento_otro":
+                ws[f"A{fila}"] = info["nombre"]
+                ws[f"B{fila}"] = int(spin.value())
+                fila += 1
+
+        fila += 1
+        ws[f"A{fila}"] = "TOTAL OTROS DESCUENTOS"
+        ws[f"B{fila}"] = int(self.lbl_total_desc_otros.text())
+        fila += 2
+
+        # =======================
+        #   TOTALES GENERALES
+        # =======================
+        ws[f"A{fila}"] = "TOTAL HABERES"
+        ws[f"B{fila}"] = int(self.lbl_total_haberes.text())
+        fila += 1
+
+        ws[f"A{fila}"] = "TOTAL DESCUENTO GENERAL"
+        ws[f"B{fila}"] = int(self.lbl_total_desc_general.text())
+        fila += 1
+
+        ws[f"A{fila}"] = "LÍQUIDO A PAGAR"
+        ws[f"B{fila}"] = int(self.lbl_liquido_pagar.text().replace("<b>", "").replace("</b>", ""))
+        fila += 3
+
+        # =======================
+        #   DATOS ADICIONALES (lado derecho Excel)
+        # =======================
+        ws[f"A{fila}"] = "DATOS ADICIONALES"
+        fila += 1
+
+        ws[f"A{fila}"] = "DÍAS TRABAJADOS"
+        ws[f"B{fila}"] = self.dias_trabajados.value()
+        fila += 1
+
+        ws[f"A{fila}"] = "Nº HORAS EXTRAS"
+        ws[f"B{fila}"] = self.num_horas_extras.value()
+        fila += 1
+
+        ws[f"A{fila}"] = "BASE IMPONIBLE"
+        ws[f"B{fila}"] = int(self.lbl_base_imponible.text())
+        fila += 1
+
+        ws[f"A{fila}"] = "BASE TRIBUTABLE"
+        ws[f"B{fila}"] = int(self.lbl_base_tributable.text())
+        fila += 1
+
+        ws[f"A{fila}"] = "AFP Trabajador"
+        ws[f"B{fila}"] = self.lbl_afp_trabajador.text()
+        fila += 1
+
+        ws[f"A{fila}"] = "Cotización AFP"
+        ws[f"B{fila}"] = self.lbl_afp_tasa.text()
+        fila += 1
+
+        ws[f"A{fila}"] = "Previsión Trabajador"
+        ws[f"B{fila}"] = self.lbl_prev_trabajador.text()
+        fila += 1
+
+        ws[f"A{fila}"] = "% a Cotizar"
+        ws[f"B{fila}"] = self.lbl_prev_tasa.text()
+        fila += 1
+
+        ws[f"A{fila}"] = "RUT"
+        ws[f"B{fila}"] = self.lbl_rut.text()
+        fila += 1
+
+        ws[f"A{fila}"] = "Observaciones"
+        ws[f"B{fila}"] = self.observaciones_edit.text()
+        fila += 2
+
+        # =======================
+        #   RETROACTIVO
+        # =======================
+        ws[f"A{fila}"] = "RETROACTIVO ASIGNACIÓN FAMILIAR"
+        fila += 1
+
+        ws[f"A{fila}"] = "Antiguo"
+        ws[f"B{fila}"] = int(self.retro_antiguo.value())
+        fila += 1
+
+        ws[f"A{fila}"] = "Actual"
+        ws[f"B{fila}"] = int(self.retro_actual.value())
+        fila += 1
+
+        ws[f"A{fila}"] = "Diferencia"
+        ws[f"B{fila}"] = int(self.retro_diferencia.value())
+        fila += 2
+
+        # ==== Guardar ====
+        wb.save(ruta)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     def __init__(self, liquidacion_existente=None, parent=None):
         """
         liquidacion_existente: dict -> rrhh_service.obtener_liquidacion_completa()
@@ -416,7 +629,12 @@ class DialogoLiquidacion(QDialog):
         main_layout.addWidget(scroll)
 
         # Botones
+        self.btn_exportar = QPushButton("Exportar a Excel")
+        self.btn_exportar.clicked.connect(self.exportar_excel)
+
         self.botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.botones.addButton(self.btn_exportar, QDialogButtonBox.ActionRole)
+
         self.botones.accepted.connect(self.guardar)
         self.botones.rejected.connect(self.reject)
         main_layout.addWidget(self.botones)
