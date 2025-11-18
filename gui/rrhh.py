@@ -103,11 +103,8 @@ class DialogoTrabajador(QDialog):
         layout.addRow("Sueldo Base:", self.sueldo_base)
 
         # Botones
-        self.btn_exportar = QPushButton("Exportar a Excel")
-        self.btn_exportar.clicked.connect(self.exportar_excel)
-
         self.botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.botones.addButton(self.btn_exportar, QDialogButtonBox.ActionRole)
+
 
         self.botones.accepted.connect(self.validar_y_guardar)
         self.botones.rejected.connect(self.reject)
