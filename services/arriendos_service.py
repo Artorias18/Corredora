@@ -44,7 +44,8 @@ def guardar_arriendo(data_arriendo):
             'direccion': data_arriendo['propiedad'].get('direccion', ''),
             'rol': data_arriendo['propiedad'].get('rol', 0),
             'comuna': data_arriendo['propiedad'].get('comuna', ''),
-            'dominio_vigente': data_arriendo['propiedad'].get('dominio_vigente', 'No Posee Documento')
+            'dominio_vigente': data_arriendo['propiedad'].get('dominio_vigente', 'No Posee Documento'),
+            'estudio_titulos': data_arriendo['propiedad'].get('estudio_titulos', 'No Posee Documento')
         }
         supabase.table("propiedad").upsert(propiedad_data,
                                            on_conflict= "codigo_interno").execute()
@@ -80,8 +81,8 @@ def guardar_arriendo(data_arriendo):
         supabase.table("arrendatario").upsert(arrendatario_data, 
                                               ).execute()
         
-        evaluacion_arriendo_data = {
-             'rut': data_arriendo['arrendatario']['rut'],
+        evaluacion_arrendatario_data = {
+             'rut_arrendatario': data_arriendo['arrendatario']['rut'],
              'fecha_evaluacion': data_arriendo['evaluacion_arrendatario']['fecha_evaluacion'],
              'sueldo_base': data_arriendo['evaluacion_arrendatario']['sueldo_base'],
              'gratificacion': data_arriendo['evaluacion_arrendatario']['gratificacion'],
@@ -95,7 +96,7 @@ def guardar_arriendo(data_arriendo):
              
         }
 
-        supabase.table("evaluacion_arriendo").upsert(evaluacion_arriendo_data,
+        supabase.table("evaluacion_arrendatario").upsert(evaluacion_arrendatario_data,
                                                      ).execute()
 
 
@@ -151,4 +152,5 @@ def obtener_arriendos_por_estado(estado):
     except Exception as e:
         logger.error(f"Error al obtener arriendos por estado {estado}: {str(e)}")
         return []
+
 

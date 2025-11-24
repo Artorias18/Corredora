@@ -902,7 +902,6 @@ class FormularioVenta(QWidget):
         self.setStyleSheet("""
             QLabel[obligatorio="true"] {
                 font-weight: bold;
-                color: #FF0000;
             }
         """)
 
@@ -1199,7 +1198,7 @@ class FormularioVenta(QWidget):
             
             if self.abono_previo_val is None or self.abono_real_val is None:
                 self.lbl_validacion_abono_subsidio.setText("Debe ingresar valores validos en los abonos para hacer la validación")
-                self.lbl_validacion_abono_subsidio.setStyleSheet("color:red")
+                self.lbl_validacion_abono_subsidio.setStyleSheet("color: yellow;")
                 return
             
             if self.abono_previo_val is not None and self.abono_real_val is not None:

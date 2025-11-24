@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QHeaderView, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo, obtener_arriendos_por_estado, guardar_arriendo
+from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo,obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuario_actual import UsuarioActual
@@ -61,8 +61,8 @@ class DashboardArriendos(QWidget):
             "Arrendador", 
             "Arrendatario", 
             "Propiedad", 
-            "Fecha",
-            "Tipo"
+            "Estado",
+            "Tipo de contrato"
         ])
         self.tabla_arriendos.setSortingEnabled(True)
         self.tabla_arriendos.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -89,7 +89,7 @@ class DashboardArriendos(QWidget):
         
        
         button_layout.addWidget(self.btn_agregar_arriendo)
-        # button_layout.addWidget(self.btn_actualizar)
+        button_layout.addWidget(self.btn_actualizar)
         button_layout.addWidget(self.btn_exportar)
         
         layout.addLayout(button_layout)
@@ -105,25 +105,27 @@ class DashboardArriendos(QWidget):
             self.tabla_arriendos.setRowCount(0)
             estado_filtro = self.filtro_estado.currentText()
 
-            if estado_filtro == "Todas los arriendos":
+            if estado_filtro == "Todos los arriendos":
                 arriendos = obtener_arriendos_resumen()
             else:
                 arriendos = obtener_arriendos_por_estado(estado_filtro)
+ 
 
+            
             if arriendos:
-                self.tabla_ventas.setRowCount(len(arriendos))
+                self.tabla_arriendos.setRowCount(len(arriendos))
                 self.arriendos = arriendos or []
             
 
-                self.tabla_ventas.setUpdatesEnabled(False)  # 🔸 Pausa el renderizado de la tabla
+                self.tabla_arriendos.setUpdatesEnabled(False)  # 🔸 Pausa el renderizado de la tabla
             try:
                 for row, arriendo in enumerate(arriendos):
                     self.tabla_arriendos.setItem(row, 0, QTableWidgetItem(str(arriendo.get("id", ""))))
                     self.tabla_arriendos.setItem(row, 1, QTableWidgetItem(arriendo.get("arrendador", "")))
                     self.tabla_arriendos.setItem(row, 2, QTableWidgetItem(arriendo.get("arrendatario", "")))
                     self.tabla_arriendos.setItem(row, 3, QTableWidgetItem(arriendo.get("propiedad", "")))
-                    self.tabla_arriendos.setItem(row, 4, QTableWidgetItem(str(arriendo.get("fecha_arriendo", ""))))
-                    self.tabla_ventas.setItem(row, 5, QTableWidgetItem(arriendo.get("tipo_arriendo", "")))
+                    self.tabla_arriendos.setItem(row, 4,QTableWidgetItem(str(arriendo.get("estado", ""))))
+                    self.tabla_arriendos.setItem(row, 5, QTableWidgetItem(arriendo.get("tipo_contrato", "")))
             finally:
                 self.tabla_arriendos.setUpdatesEnabled(True)   # 🔸 Reactiva el renderizado
                 self.tabla_arriendos.resizeColumnsToContents()
@@ -214,7 +216,6 @@ class FormularioArriendo(QWidget):
         self.setStyleSheet("""
             QLabel[obligatorio="true"] {
                 font-weight: bold;
-                color: #FF0000;
             }
         """)
 
@@ -250,7 +251,7 @@ class FormularioArriendo(QWidget):
     def setup_tab_arrendatario(self, tab):
         layout = QFormLayout(tab)
         
-        # Campos del comprador
+        # Campos del arrendatario
         self.txt_arrendatario_nombre = QLineEdit()
         self.txt_arrendatario_rut = QLineEdit()
         self.txt_arrendatario_direccion = QLineEdit()
@@ -260,7 +261,7 @@ class FormularioArriendo(QWidget):
         self.cmb_tipo_trabajador.addItems(["Dependiente", "Independiente", "Otro"])
         self.txt_antiguedad_laboral = QLineEdit()
         self.cmb_dicom = QComboBox()
-        self.cmb_dicom.addItems(["Si","No"])
+        self.cmb_dicom.addItems(["Sí","No"])
         self.txt_comentarios = QTextEdit()
         self.cmb_evaluacion_estado = QComboBox()
         self.cmb_evaluacion_estado.addItems(["Pendiente","Aprobado","Rechazado"])
@@ -464,17 +465,15 @@ class FormularioArriendo(QWidget):
             item = self.tbl_evaluacion.item(fila, col)
 
             if item and item.text().strip():
-                texto = item.text().replace(".", "").replace(",", "")
-                try:
-                    valor = float(texto)
-                except:
-                    valor = 0.0
+                texto = item.text().replace(".", "").replace(",", "").strip()
+                valor = float(texto) if texto else 0.0
             else:
                 valor = 0.0
 
             datos[clave] = valor
 
         return datos
+
 
 
                 
@@ -511,7 +510,7 @@ class FormularioArriendo(QWidget):
         self.cmb_periodo_pago.addItems(["Mensual", "Trimestral", "Anual"])
 
         self.cmb_cuenta_fm = QComboBox()
-        self.cmb_periodo_pago.addItems(["1","2","3",4])
+        self.cmb_cuenta_fm.addItems(["1","2","3","4"])
 
         self.txt_observaciones = QTextEdit()
 
@@ -524,7 +523,7 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Tipo de contrato:"), self.cmb_tipo_contrato)
         layout.addRow(self.crear_label("Forma de pago:"), self.txt_forma_pago)
         layout.addRow(self.crear_label("Periodo de pago"), self.cmb_periodo_pago)
-        layout.addRow(self.crear_label("Cuenta FM", self.cmb_cuenta_fm))
+        layout.addRow(self.crear_label("Cuenta FM"), self.cmb_cuenta_fm)
         layout.addRow(self.crear_label("Observaciones"), self.txt_observaciones)
 
         
