@@ -1,8 +1,12 @@
 from PySide6.QtWidgets import QHeaderView, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo,obtener_arriendos_por_estado, guardar_arriendo
+from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuario_actual import UsuarioActual
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.dataframe import dataframe_to_rows
 from services.supabase_client import supabase
 import json
 import pandas as pd
@@ -83,7 +87,7 @@ class DashboardArriendos(QWidget):
         self.btn_actualizar.clicked.connect(self.cargar_arriendos)
         
         self.btn_exportar = QPushButton("Exportar a Excel")
-        self.btn_exportar.clicked.connect(self.exportar_a_excel)
+        self.btn_exportar.clicked.connect(self.exportar_excel)
         
  
         
@@ -147,8 +151,131 @@ class DashboardArriendos(QWidget):
     def mostrar_detalle_arriendo(self):
         pass
 
-    def exportar_a_excel(self):
-        pass
+    def generar_excel_finanzas(self, df, ruta):
+        """
+        Genera el Excel con formato bonito.
+        """
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Arriendos"
+
+        # Título
+        ws.merge_cells("A1:R1")
+        titulo = ws["A1"]
+        titulo.value = "CONSOLIDADO DE ARRIENDOS"
+        titulo.font = Font(size=16, bold=True)
+        titulo.alignment = Alignment(horizontal="center")
+
+        # Insertar DataFrame
+        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 3):
+            for c_idx, value in enumerate(row, 1):
+                ws.cell(row=r_idx, column=c_idx, value=value)
+
+        # Estilo cabeceras
+        header_fill = PatternFill("solid", fgColor="D9D9D9")
+        for cell in ws[3]:
+            cell.font = Font(bold=True)
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+            cell.border = Border(
+                left=Side(style="thin"),
+                right=Side(style="thin"),
+                top=Side(style="thin"),
+                bottom=Side(style="thin")
+            )
+
+        # Ajuste seguro de anchos (sin errores por merged cells)
+        for col_idx, column_cells in enumerate(ws.columns, 1):
+            max_length = 0
+            for cell in column_cells:
+                if cell.value:
+                    try:
+                        max_length = max(max_length, len(str(cell.value)))
+                    except:
+                        pass
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = max_length + 3
+
+        wb.save(ruta)
+
+
+    #### ---------------- EXPORTADOR ---------------- ####
+
+    def exportar_excel(self):
+        """
+        Exporta Excel directamente desde Supabase, 
+        incluyendo toda la información de arriendos.
+        """
+
+        datos = obtener_arriendos_finanzas()
+
+        if not datos:
+            QMessageBox.warning(self, "Sin datos", "No se encontraron arriendos para exportar.")
+            return
+
+        columnas = [
+            "ROL", "COMUNA", "DIRECCION", "NRO DEPARTAMENTO",
+            "NOMBRE ARRENDATARIO", "RUT ARRENDATARIO",
+            "MONTO RENTA", "ESTADO",
+            "FECHA INICIO", "FECHA TERMINO",
+            "NOMBRE PROPIETARIO", "RUT PROPIETARIO",
+            "CORREO ARRENDATARIO", "TELEFONO",
+            "TIPO PAGO", "GASTO COMUN", "GARANTIA"
+        ]
+
+        df = pd.DataFrame(datos)
+
+        # 🔹 Convertir booleano a texto legible
+        if "gastos_comunes_incluidos" in df.columns:
+            df["gastos_comunes"] = df["gastos_comunes_incluidos"].apply(
+                lambda x: "Incluido" if x else "No incluido"
+            )
+        else:
+            df["gastos_comunes"] = ""
+
+        # Renombrar columnas
+        df_final = df.rename(columns={
+            "rol": "ROL",
+            "comuna": "COMUNA",
+            "direccion": "DIRECCION",
+            "nombre_arrendatario": "NOMBRE ARRENDATARIO",
+            "rut_arrendatario": "RUT ARRENDATARIO",
+            "renta_mensual": "MONTO RENTA",
+            "estado": "ESTADO",
+            "fecha_inicio": "FECHA INICIO",
+            "fecha_termino": "FECHA TERMINO",
+            "nombre_propietario": "NOMBRE PROPIETARIO",
+            "rut_propietario": "RUT PROPIETARIO",
+            "correo_arrendatario": "CORREO ARRENDATARIO",
+            "telefono_arrendatario": "TELEFONO",
+            "forma_pago": "TIPO PAGO",
+            "gastos_comunes": "GASTO COMUN",
+            "garantia": "GARANTIA"
+        })
+
+        df_final = df_final.reindex(columns=columnas)
+
+        ruta, _ = QFileDialog.getSaveFileName(
+            self,
+            "Guardar Excel",
+            "conglomerado_arriendos",
+            "Archivos Excel (*.xlsx)"
+        )
+
+        if not ruta:
+            return
+
+        if not ruta.endswith(".xlsx"):
+            ruta += ".xlsx"
+
+        try:
+            self.generar_excel_finanzas(df_final, ruta)
+            QMessageBox.information(self, "Éxito", f"Excel generado correctamente:\n{ruta}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al generar Excel:\n{e}")
+
 
 
     def abrir_formulario_arriendo(self):
@@ -335,7 +462,7 @@ class FormularioArriendo(QWidget):
 
         self.tbl_evaluacion = QTableWidget()
         self.tbl_evaluacion.setRowCount(9)
-        self.tbl_evaluacion.setColumnCount(4)
+        self.tbl_evaluacion.setColumnCount(5)
 
         # Tamaño mínimo más grande
         self.tbl_evaluacion.setMinimumWidth(700)
@@ -343,7 +470,7 @@ class FormularioArriendo(QWidget):
 
         # Encabezados
         self.tbl_evaluacion.setHorizontalHeaderLabels([
-            "Concepto", "Mes 1", "Mes 2", "Mes 3"
+            "Concepto", "Mes 1", "Mes 2", "Mes 3", "Resultado"
         ])
 
         # Centrar texto de encabezados
@@ -377,6 +504,7 @@ class FormularioArriendo(QWidget):
         header.setSectionResizeMode(1, QHeaderView.Stretch)
         header.setSectionResizeMode(2, QHeaderView.Stretch)
         header.setSectionResizeMode(3, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
 
         # Añadir tabla al contenedor centrado
         contenedor_layout.addWidget(self.tbl_evaluacion)
@@ -419,6 +547,51 @@ class FormularioArriendo(QWidget):
 
             self.actualizar_tabla_evaluacion(mes, resultados_completos)
 
+    def calcular_resultados_evaluacion(self):
+        """
+        Recorre la tabla de evaluación y calcula la columna Resultado.
+        Si los valores de Mes1, Mes2 y Mes3 son iguales → usa ese valor.
+        Si hay cambios → calcula el promedio.
+        """
+        COL_M1 = 1
+        COL_M2 = 2
+        COL_M3 = 3
+        COL_RES = 4
+
+        for fila in range(self.tbl_evaluacion.rowCount()):
+
+            valores = []
+
+            # Obtener los valores de cada mes
+            for col in (COL_M1, COL_M2, COL_M3):
+                item = self.tbl_evaluacion.item(fila, col)
+
+                if item and item.text().strip():
+                    texto = item.text().replace(".", "").replace(",", "")
+                    try:
+                        valor = float(texto)
+                    except:
+                        valor = 0
+                else:
+                    valor = 0
+
+                valores.append(valor)
+
+            v1, v2, v3 = valores
+
+            # --- LÓGICA DE PROMEDIO O IGUALDAD ---
+            if v1 == v2 == v3:
+                resultado = v1
+            else:
+                resultado = sum(valores) / 3
+
+            # Crear item resultado
+            item_res = QTableWidgetItem(f"{resultado:,.0f}")
+            item_res.setTextAlignment(Qt.AlignCenter)
+            item_res.setFlags(item_res.flags() ^ Qt.ItemIsEditable)
+
+            self.tbl_evaluacion.setItem(fila, COL_RES, item_res)
+
 
     def actualizar_tabla_evaluacion(self, mes, resultados):
         col = mes  
@@ -443,9 +616,11 @@ class FormularioArriendo(QWidget):
             item.setTextAlignment(Qt.AlignCenter)
             self.tbl_evaluacion.setItem(fila, col, item)
 
+        self.calcular_resultados_evaluacion()
+
     
     def obtener_diccionario_evaluacion(self):
-        col = self.tbl_evaluacion.columnCount() - 1
+        col = 4  # columna Resultado
 
         mapping = [
             "sueldo_base",
@@ -717,13 +892,25 @@ class FormularioMes(QDialog):
     def __init__(self, numero_mes, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Evaluación - Mes {numero_mes}")
-        self.resize(600, 500)
+        self.resize(650, 600)
 
-        layout = QVBoxLayout(self)
+        # --- LAYOUT PRINCIPAL ---
+        layout_principal = QVBoxLayout(self)
+
+        # --- SCROLL AREA ---
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        layout_principal.addWidget(scroll)
+
+        # --- CONTENEDOR INTERNO (donde va todo tu contenido) ---
+        contenedor = QWidget()
+        scroll.setWidget(contenedor)
+
+        layout = QVBoxLayout(contenedor)
 
         form = QFormLayout()
 
-        # ---- CAMPOS FIJOS ----
+        # ---- CAMPOS ----
         self.sueldo_base = QLineEdit()
         self.horas_extras = QLineEdit()
         self.afp = QLineEdit()
@@ -755,7 +942,7 @@ class FormularioMes(QDialog):
         form.addRow("Anticipo:", self.anticipo)
         form.addRow("Viáticos:", self.viaticos)
         form.addRow("Herramientas:", self.herramientas)
-        form.addRow("Sueldo minimo:", self.sueldo_minimo)
+        form.addRow("Sueldo Mínimo:", self.sueldo_minimo)
 
         layout.addLayout(form)
 
@@ -767,9 +954,11 @@ class FormularioMes(QDialog):
         self.tbl_descuentos.setHorizontalHeaderLabels(["Concepto", "Monto"])
         self.tbl_descuentos.horizontalHeader().setStretchLastSection(True)
 
+        self.tbl_descuentos.setMinimumHeight(120)
+
         layout.addWidget(self.tbl_descuentos)
 
-        # Botones para manejar descuentos
+        # Botones descuentos
         btns = QHBoxLayout()
         btn_add = QPushButton("Agregar descuento")
         btn_del = QPushButton("Eliminar seleccionado")
@@ -779,10 +968,9 @@ class FormularioMes(QDialog):
 
         btns.addWidget(btn_add)
         btns.addWidget(btn_del)
-
         layout.addLayout(btns)
 
-        # Botones OK / Cancel
+        # Botones OK/Cancel
         botones = QHBoxLayout()
         btn_ok = QPushButton("Aceptar")
         btn_cancel = QPushButton("Cancelar")
@@ -792,7 +980,6 @@ class FormularioMes(QDialog):
 
         botones.addWidget(btn_ok)
         botones.addWidget(btn_cancel)
-
         layout.addLayout(botones)
 
 

@@ -154,3 +154,14 @@ def obtener_arriendos_por_estado(estado):
         return []
 
 
+def obtener_arriendos_finanzas():
+    """
+    Llama a la función SQL obtener_arriendos_finanzas()
+    y retorna la lista de arriendos con todos los datos.
+    """
+    try:
+        response = supabase.rpc("obtener_arriendos_finanzas").execute()
+        return response.data or []
+    except Exception as e:
+        logger.error(f"Error al obtener arriendos finanzas: {e}")
+        return []
