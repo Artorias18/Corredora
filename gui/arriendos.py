@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QHeaderView, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from PySide6.QtWidgets import QHeaderView,QGroupBox ,QSizePolicy, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
 from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
@@ -10,6 +10,289 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 from services.supabase_client import supabase
 import json
 import pandas as pd
+
+
+class DetalleArriendoWindow(QWidget):
+    def __init__(self, arriendo_id,):
+        super().__init__()
+
+        self.arriendo_id = arriendo_id
+        self.setWindowTitle(f"Detalle de Arriendo #{arriendo_id}")
+        self.resize(900, 700)
+        
+        # Layout principal con scroll
+        layout_principal = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        contenido = QWidget()
+        scroll.setWidget(contenido)
+        layout_principal.addWidget(scroll)
+
+        # Layout del contenido
+        layout_contenido = QVBoxLayout(contenido)
+
+
+        self.detalle_arriendo = obtener_detalle_arriendo(arriendo_id)
+
+        if not self.detalle_arriendo:
+            layout_contenido.addWidget(QLabel("No se encontraron detalles para esta venta"))
+            return
+        
+        self.tabs = QTabWidget()
+        layout_contenido.addWidget(self.tabs)
+        
+
+        self.setup_tab_arrendador()
+       
+        self.setup_tab_arrendatario()
+
+        self.setup_tab_propiedad()
+       
+        self.setup_tab_evaluacion()
+    
+        self.setup_tab_arriendo()
+      
+
+
+
+
+
+
+
+
+         # Botón para cerrar
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.clicked.connect(self.close)
+        layout_contenido.addWidget(btn_cerrar)
+        
+        # self.btn_editar = QPushButton("Editar Venta")
+        # self.btn_editar.clicked.connect(self.abrir_formulario_edicion)
+        # layout_contenido.addWidget(self.btn_editar)
+
+        # self.btnEliminar = QPushButton("Eliminar Venta")
+        # self.btnEliminar.clicked.connect(self.eliminar_venta)
+        # layout_contenido.addWidget(self.btnEliminar)
+        
+
+    def setup_tab_arrendador(self):
+        tab = QWidget()
+        self.tabs.addTab(tab,"Arrendador")
+        layout = QFormLayout(tab)
+
+        arrendador = self.detalle_arriendo.get('arrendador', {})
+
+        campos = [
+            ("Nombre", arrendador.get('nombre')),
+            ("Rut", arrendador.get('rut')),
+            ("Teléfono", arrendador.get('telefono')),
+            ("Dirección", arrendador.get('direccion')),
+            ('Correo', arrendador.get('correo_electronico'))
+        ]
+
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+        
+
+
+    
+    def setup_tab_arrendatario(self):
+        tab = QWidget()
+        self.tabs.addTab(tab,"Arrendatario")
+        layout = QFormLayout(tab)
+
+        arrendatario = self.detalle_arriendo.get('arrendatario', {})
+
+        campos = [
+            ("Nombre", arrendatario.get('nombre')),
+            ("Rut", arrendatario.get('rut')),
+            ("Teléfono", arrendatario.get('telefono')),
+            ("Dirección", arrendatario.get('direccion')),
+            ('Correo', arrendatario.get('email')),
+            ("Tipo de Trabajador", arrendatario.get('tipo_trabajador')),
+            ("Antigüedad Laboral", arrendatario.get('antiguedad_laboral')),
+            ("¿Tiene Dicom?", arrendatario.get('dicom')),
+            ("Estado de Evaluación", arrendatario.get('evaluacion_estado')),
+            ("Renta", arrendatario.get('renta')),
+            ("Comentarios", arrendatario.get('comentarios'))
+            ]
+        
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+    def setup_tab_propiedad(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Propiedad")
+        layout = QFormLayout(tab)
+        
+        propiedad = self.detalle_arriendo.get('propiedad', {})
+
+        campos= [
+            ("Código interno", propiedad.get('codigo_interno')),
+            ("Dirección", propiedad.get('direccion')),
+            ("ROL", propiedad.get('rol')),
+            ("Comuna", propiedad.get('comuna')),
+            ("Dominio vigente", propiedad.get('dominio_vigente'))
+        ]
+
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+
+    def setup_tab_evaluacion(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Evaluación Arriendo")
+        layout = QFormLayout(tab)
+        
+        evaluacion= self.detalle_arriendo.get('evaluacion_arrendatario', {})
+
+        campos = [
+            ("Fecha de Evaluación", evaluacion.get('fecha_evaluacion')),
+            ("Sueldo Base", evaluacion.get('sueldo_base')),
+            ("Gratificación", evaluacion.get('gratificacion')),
+            ("Total Imponible", evaluacion.get('total_imponible')),
+            ("Total no Imponible", evaluacion.get('total_no_imponible')),
+            ("Descuentos Legales", evaluacion.get('descuentos_legales')),
+            ("Renta Tributable", evaluacion.get('rta_tributable')),
+            ("Impuesto Renta", evaluacion.get('rta_tributable')),
+            ("Total Haberes", evaluacion.get('total_haberes')),
+            ("Líquido a Pago", evaluacion.get('liquido_pago')),
+            ("Anticipo", evaluacion.get('anticipo')),
+            ("Descuentos Varios", evaluacion.get('desc_varios')),
+            ("Locomoción", evaluacion.get('locomocion')),
+            ("Resultado", evaluacion.get('resultado')),
+            ("Comentarios", evaluacion.get('comentarios'))
+        ]
+
+
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        
+    def setup_tab_arriendo(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Arriendo")
+        layout = QFormLayout(tab)
+        
+        arriendo = self.detalle_arriendo.get('arriendo', {})
+
+        box_basicos = QGroupBox("Datos Básicos del Arriendo")
+        layout_basicos = QFormLayout()
+
+        campos_basicos = [
+            ("Fecha Inicio", arriendo.get("fecha_inicio")),
+            ("Fecha de Término", arriendo.get("fecha_termino")),
+            ("Renta Mensual", arriendo.get("renta_mensual")),
+            ("Garantía", arriendo.get("garantia")),
+            ("Gastos comunes incluidos", "Sí" if arriendo.get("gastos_comunes_incluidos") else "No"),
+            ("Estado del arriendo", arriendo.get("estado")),
+            ("Tipo de contrato", arriendo.get("tipo_contrato")),
+        ]
+
+        for label, value in campos_basicos:
+            if value not in (None, "", 0):
+                layout_basicos.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        box_basicos.setLayout(layout_basicos)
+        layout.addWidget(box_basicos)
+
+        # ======================================
+        #   SECCIÓN 2: PAGOS
+        # ======================================
+        box_pagos = QGroupBox("Datos de Pago")
+        layout_pagos = QFormLayout()
+
+        campos_pagos = [
+            ("Forma de pago", arriendo.get("forma_pago")),
+            ("Periodo de pago", arriendo.get("periodo_pago")),
+            ("Día de pago", arriendo.get("dia_pago")),
+            ("Cuenta FM", arriendo.get("cuenta_fm")),
+        ]
+
+        for label, value in campos_pagos:
+            if value not in (None, "", 0):
+                layout_pagos.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        box_pagos.setLayout(layout_pagos)
+        layout.addWidget(box_pagos)
+
+        # ======================================
+        #   SECCIÓN 3: DEPÓSITOS / CUENTA DESTINO
+        # ======================================
+        box_depositos = QGroupBox("Depósitos / Cuenta destino")
+        layout_depositos = QFormLayout()
+
+        campos_depositos = [
+            ("Número de cuenta", arriendo.get("nro_cuenta")),
+            ("Banco destino", arriendo.get("banco_destino")),
+            ("Tipo de cuenta", arriendo.get("tipo_cuenta")),
+            ("RUT para depósito", arriendo.get("rut_para_deposito")),
+            ("Titular depósito", arriendo.get("titular_deposito")),
+            ("Quién deposita", arriendo.get("quien_deposita")),
+            ("Correo depósito", arriendo.get("correo_deposito")),
+        ]
+
+        for label, value in campos_depositos:
+            if value not in (None, "", 0):
+                layout_depositos.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        box_depositos.setLayout(layout_depositos)
+        layout.addWidget(box_depositos)
+
+        # ======================================
+        #   SECCIÓN 4: HONORARIOS
+        # ======================================
+        box_honorarios = QGroupBox("Honorarios")
+        layout_honorarios = QFormLayout()
+
+        campos_honorarios = [
+            ("Honorarios (%)", arriendo.get("honorarios_porcentaje")),
+            ("Honorarios (monto)", arriendo.get("honorarios_monto")),
+        ]
+
+        for label, value in campos_honorarios:
+            if value not in (None, "", 0):
+                layout_honorarios.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        box_honorarios.setLayout(layout_honorarios)
+        layout.addWidget(box_honorarios)
+
+        # ======================================
+        #   SECCIÓN 5: INFORMACIÓN ADICIONAL
+        # ======================================
+        box_extra = QGroupBox("Información adicional")
+        layout_extra = QFormLayout()
+
+        campos_extra = [
+            ("Último mes pago", arriendo.get("ultimo_mes_pago")),
+            ("Aseo municipal", arriendo.get("aseo_municipal")),
+            ("Reajuste", arriendo.get("reajuste")),
+            ("GGCC", arriendo.get("ggcc")),
+            ("Cuenta GGCC", arriendo.get("cuenta_ggcc")),
+            ("Dirección consulta", arriendo.get("direccion_consulta")),
+            ("Periodo anterior", arriendo.get("periodo_anterior")),
+            ("Monto anterior", arriendo.get("monto_anterior")),
+            ("Naturaleza bien raíz", arriendo.get("naturaleza_bien_raiz")),
+            ("DFL 2", arriendo.get("dfl12")),
+            ("Destino", arriendo.get("destino")),
+            ("Amoblado", arriendo.get("amoblado")),
+            ("Observaciones", arriendo.get("observaciones")),
+        ]
+
+        for label, value in campos_extra:
+            if value not in (None, "", 0):
+                layout_extra.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+        box_extra.setLayout(layout_extra)
+        layout.addWidget(box_extra)
+
+
+
+
+
 
 class DashboardArriendos(QWidget):
     def __init__(self, parent = None):
@@ -148,8 +431,10 @@ class DashboardArriendos(QWidget):
     def filtrar_arriendos(self):
         pass
         
-    def mostrar_detalle_arriendo(self):
-        pass
+    def mostrar_detalle_arriendo(self, item):
+        arriendo_id = int(self.tabla_arriendos.item(item.row(), 0).text())
+        self.ventana_detalle = DetalleArriendoWindow(arriendo_id)
+        self.ventana_detalle.show()
 
     def generar_excel_finanzas(self, df, ruta):
         """
@@ -331,7 +616,7 @@ class FormularioArriendo(QWidget):
         self.setup_tab_evaluacion(tab_evaluacion)
 
         tab_arriendo = QWidget()
-        self.tabs.addTab(tab_arriendo, "Contrato Arriendo")
+        self.tabs.addTab(tab_arriendo, "Arriendo")
         self.setup_tab_arriendo(tab_arriendo)
 
 
@@ -409,7 +694,7 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Email:"), self.txt_arrendatario_email)
         
         layout.addRow(self.crear_label("Tipo de Trabajador:"), self.cmb_tipo_trabajador)
-        layout.addRow(self.crear_label("Antigüedad Laboral (meses):"), self.txt_antiguedad_laboral)
+        layout.addRow(self.crear_label("Antigüedad Laboral(Meses):"), self.txt_antiguedad_laboral)
 
         # --- Evaluación ---
         layout.addRow(self.crear_label("¿Tiene DICOM?"), self.cmb_dicom)
@@ -658,7 +943,6 @@ class FormularioArriendo(QWidget):
 
     def setup_tab_arriendo(self,tab):
 
-        layout = QFormLayout(tab)
 
         self.fecha_inicio = QDateEdit(QDate.currentDate())
         self.fecha_inicio.setCalendarPopup(True)
@@ -680,6 +964,10 @@ class FormularioArriendo(QWidget):
         self.cmb_tipo_contrato.addItems(["Plazo Fijo", "Plazo Indefinido"])
 
         self.txt_forma_pago = QLineEdit()
+        
+        
+        
+
 
         self.cmb_periodo_pago = QComboBox()
         self.cmb_periodo_pago.addItems(["Mensual", "Trimestral", "Anual"])
@@ -687,21 +975,171 @@ class FormularioArriendo(QWidget):
         self.cmb_cuenta_fm = QComboBox()
         self.cmb_cuenta_fm.addItems(["1","2","3","4"])
 
+
+        self.txt_nro_cuenta = QLineEdit()
+        self.txt_banco_destino = QLineEdit()
+        self.txt_aseo_municipal  = QLineEdit()
+        self.txt_reajuste = QLineEdit()
+        self.txt_ggcc = QLineEdit()
+
+        self.txt_honorarios_porcentaje  = QLineEdit()
+        self.txt_titular_deposito  = QLineEdit()
+        self.txt_quien_deposita  = QLineEdit()
+        self.txt_correo_deposito = QLineEdit()
+        self.txt_dia_pago  = QLineEdit()
+        self.txt_honorarios_monto  = QLineEdit()
+        self.txt_tipo_cuenta   = QLineEdit()
+        self.txt_rut_para_deposito  = QLineEdit()
+        self.txt_cuenta_ggcc  = QLineEdit()
+        self.txt_ultimo_mes_pago = QLineEdit()
+        self.txt_direccion_consulta = QLineEdit()
+        self.txt_periodo_anterior  = QLineEdit()
+        self.txt_monto_anterior  = QLineEdit()
+        self.txt_naturaleza_bien_raiz = QLineEdit()
+
+        self.cmb_dfl12= QComboBox()
+        self.cmb_dfl12.addItems(["Si","No"])
+
+        self.txt_destino = QLineEdit()
+
+        self.cmb_amoblado= QComboBox()
+        self.cmb_amoblado.addItems(["Si","No"])
+
+
         self.txt_observaciones = QTextEdit()
 
-        layout.addRow(self.crear_label("Fecha Inicio:", True), self.fecha_inicio)
-        layout.addRow(self.crear_label("Fecha de Termino:"), self.fecha_termino)
-        layout.addRow(self.crear_label("Renta Mensual:"), self.txt_renta_mensual)
-        layout.addRow(self.crear_label("Garantía:"), self.txt_garantia)
-        layout.addWidget(self.chk_gastos_comunes)
-        layout.addRow(self.crear_label("Estado del arriendo:"), self.cmb_estado_arriendo)
-        layout.addRow(self.crear_label("Tipo de contrato:"), self.cmb_tipo_contrato)
-        layout.addRow(self.crear_label("Forma de pago:"), self.txt_forma_pago)
-        layout.addRow(self.crear_label("Periodo de pago"), self.cmb_periodo_pago)
-        layout.addRow(self.crear_label("Cuenta FM"), self.cmb_cuenta_fm)
-        layout.addRow(self.crear_label("Observaciones"), self.txt_observaciones)
+        """
+        Versión robusta: todos los groupboxes van dentro de un content_widget
+        que a su vez está embebido en un QScrollArea. Esto evita que los boxes
+        estiren la ventana principal.
+        """
 
+        # =========================
+        # Content widget (todo aquí va dentro del scroll)
+        # =========================
+        content_widget = QWidget()
+        content_vbox = QVBoxLayout(content_widget)
+        content_vbox.setContentsMargins(0, 0, 0, 0)
+        content_vbox.setSpacing(10)
+        content_vbox.setAlignment(Qt.AlignTop)
+
+
+        # Crear layout principal del tab
+        main_layout = QVBoxLayout()
+        main_layout.setAlignment(Qt.AlignTop)  
+        tab.setLayout(main_layout)
+
+            # -------------------------
+        # Box 1: Básicos
+        # -------------------------
+        box_basicos = QGroupBox("Datos básicos del arriendo")
+        layout_basicos = QFormLayout()
+        layout_basicos.addRow(self.crear_label("Fecha Inicio:", True), self.fecha_inicio)
+        layout_basicos.addRow(self.crear_label("Fecha de Término:"), self.fecha_termino)
+        layout_basicos.addRow(self.crear_label("Renta Mensual:"), self.txt_renta_mensual)
+        layout_basicos.addRow(self.crear_label("Garantía:"), self.txt_garantia)
+        layout_basicos.addRow(self.chk_gastos_comunes)
+        layout_basicos.addRow(self.crear_label("Estado del arriendo:"), self.cmb_estado_arriendo)
+        layout_basicos.addRow(self.crear_label("Tipo de contrato:"), self.cmb_tipo_contrato)
+        box_basicos.setLayout(layout_basicos)
+
+        # Evitar que el groupbox se expanda verticalmente
+        box_basicos.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         
+
+        content_vbox.addWidget(box_basicos)
+
+        # -------------------------
+        # Box 2: Pagos
+        # -------------------------
+        box_pagos = QGroupBox("Datos de Pago")
+        layout_pagos = QFormLayout()
+        layout_pagos.addRow(self.crear_label("Forma de pago:"), self.txt_forma_pago)
+        layout_pagos.addRow(self.crear_label("Periodo de pago"), self.cmb_periodo_pago)
+        layout_pagos.addRow(self.crear_label("Día de pago:"), self.txt_dia_pago)
+        layout_pagos.addRow(self.crear_label("Cuenta FM"), self.cmb_cuenta_fm)
+        box_pagos.setLayout(layout_pagos)
+        box_pagos.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        content_vbox.addWidget(box_pagos)
+
+        # -------------------------
+        # Box 3: Depósitos
+        # -------------------------
+        box_depositos = QGroupBox("Depósitos / Cuenta destino")
+        layout_depositos = QFormLayout()
+        layout_depositos.addRow(self.crear_label("Número de cuenta:"), self.txt_nro_cuenta)
+        layout_depositos.addRow(self.crear_label("Banco destino:"), self.txt_banco_destino)
+        layout_depositos.addRow(self.crear_label("Tipo de cuenta:"), self.txt_tipo_cuenta)
+        layout_depositos.addRow(self.crear_label("RUT para depósito:"), self.txt_rut_para_deposito)
+        layout_depositos.addRow(self.crear_label("Titular depósito:"), self.txt_titular_deposito)
+        layout_depositos.addRow(self.crear_label("Quién deposita:"), self.txt_quien_deposita)
+        layout_depositos.addRow(self.crear_label("Correo depósito:"), self.txt_correo_deposito)
+
+        box_depositos.setLayout(layout_depositos)
+        box_depositos.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        
+        content_vbox.addWidget(box_depositos)
+
+        # -------------------------
+        # Box 4: Honorarios
+        # -------------------------
+        box_honorarios = QGroupBox("Honorarios")
+        layout_honorarios = QFormLayout()
+        layout_honorarios.addRow(self.crear_label("Honorarios (%)"), self.txt_honorarios_porcentaje)
+        layout_honorarios.addRow(self.crear_label("Honorarios (monto)"), self.txt_honorarios_monto)
+        box_honorarios.setLayout(layout_honorarios)
+        box_honorarios.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        content_vbox.addWidget(box_honorarios)
+
+        # -------------------------
+        # Box 5: Extra / Información adicional
+        # -------------------------
+        box_extra = QGroupBox("Información adicional")
+        layout_extra = QFormLayout()
+        layout_extra.addRow(self.crear_label("Último mes pago"), self.txt_ultimo_mes_pago)
+        layout_extra.addRow(self.crear_label("Aseo municipal"), self.txt_aseo_municipal)
+        layout_extra.addRow(self.crear_label("Reajuste"), self.txt_reajuste)
+        layout_extra.addRow(self.crear_label("GGCC"), self.txt_ggcc)
+        layout_extra.addRow(self.crear_label("Cuenta GGCC:"), self.txt_cuenta_ggcc)
+        layout_extra.addRow(self.crear_label("Dirección consulta"), self.txt_direccion_consulta)
+        layout_extra.addRow(self.crear_label("Periodo anterior"), self.txt_periodo_anterior)
+        layout_extra.addRow(self.crear_label("Monto anterior"), self.txt_monto_anterior)
+        layout_extra.addRow(self.crear_label("Naturaleza bien raíz"), self.txt_naturaleza_bien_raiz)
+        layout_extra.addRow(self.crear_label("DFL 2"), self.cmb_dfl12)
+        layout_extra.addRow(self.crear_label("Destino"), self.txt_destino)
+        layout_extra.addRow(self.crear_label("Amoblado"), self.cmb_amoblado)
+        layout_extra.addRow(self.crear_label("Observaciones"), self.txt_observaciones)
+        box_extra.setLayout(layout_extra)
+        box_extra.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        
+        content_vbox.addWidget(box_extra)
+
+        # =========================
+        # SCROLL AREA: envuelve content_widget
+        # =========================
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameStyle(0)
+        scroll.setWidget(content_widget)
+
+        # Opcional: controlar la altura máxima del scroll para que la pestaña no crezca sin control
+        # Ajusta el valor a lo que visualmente quieras (por ejemplo 520 ó 600)
+        scroll.setMaximumHeight(620)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        # =========================
+        # Añadir scroll al layout principal del tab
+        # =========================
+        main_layout.addWidget(scroll)
+
+        # Si quieres un botón o controles al final del tab (fuera del scroll),
+        # agrégalos después del scroll. De este modo siempre estarán visibles.
+        # Ejemplo (botón guardar fuera del scroll):
+        # btn_guardar = QPushButton("Guardar Arriendo")
+        # main_layout.addWidget(btn_guardar, alignment=Qt.AlignRight)
+
+        # Fin de setup_tab_arriendo
 
 
 
@@ -781,6 +1219,35 @@ class FormularioArriendo(QWidget):
                     'tipo_contrato': self.cmb_tipo_contrato.currentText(),
                     'forma_pago': self.txt_forma_pago.text(),
                     'periodo_pago': self.cmb_periodo_pago.currentText(),
+                    'cuenta_fm': self.cmb_cuenta_fm.currentText(),
+                    
+
+                    'nro_cuenta': self.txt_nro_cuenta.text(),
+                    'banco_destino': self.txt_banco_destino.text(),
+                    'aseo_municipal': self.txt_aseo_municipal.text(),
+                    'reajuste': self.txt_reajuste.text(),
+                    'ggcc': self.txt_ggcc.text(),
+
+                    
+                    'honorarios_porcentaje': self.txt_honorarios_porcentaje.text(),
+                    'titular_deposito': self.txt_titular_deposito.text(),
+                    'quien_deposita': self.txt_quien_deposita.text(),
+                    'correo_deposito': self.txt_correo_deposito.text(),
+                    'dia_pago': self.txt_dia_pago.text(),
+                    'honorarios_monto': self.txt_honorarios_monto.text(),
+                    'tipo_cuenta': self.txt_tipo_cuenta.text(),
+                    'rut_para_deposito': self.txt_rut_para_deposito.text(),
+                    'cuenta_ggcc': self.txt_cuenta_ggcc.text(),
+                    'ultimo_mes_pago': self.txt_ultimo_mes_pago.text(),
+                    'direccion_consulta': self.txt_direccion_consulta.text(),
+                    'periodo_anterior': self.txt_periodo_anterior.text(),
+                    'monto_anterior': self.txt_monto_anterior.text(),
+                    'naturaleza_bien_raiz': self.txt_naturaleza_bien_raiz.text(),
+
+                    # --- COMBOBOX Y DESTINO ---
+                    'dfl2': self.cmb_dfl12.currentText(),
+                    'destino': self.txt_destino.text(),
+                    'amoblado': self.cmb_amoblado.currentText(),
                     'observaciones': self.txt_observaciones.toPlainText()
                 }
             }

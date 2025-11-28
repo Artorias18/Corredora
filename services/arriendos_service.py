@@ -72,8 +72,6 @@ def guardar_arriendo(data_arriendo):
                  'antiguedad_laboral': data_arriendo['arrendatario']['antiguedad_laboral'],
                  'dicom': data_arriendo['arrendatario']['dicom'],
                  'comentarios': data_arriendo['arrendatario']['comentarios'],
-                 'evaluacion_estado': data_arriendo['arrendatario']['evaluacion_estado'],
-                 'fecha_evaluacion': data_arriendo['arrendatario']['fecha_evaluacion'],
                  'renta': float(data_arriendo['arrendatario']['renta'] or 0)
 
         }
@@ -107,14 +105,41 @@ def guardar_arriendo(data_arriendo):
              'fecha_inicio':data_arriendo['arriendo']['fecha_inicio'] or None,
              'fecha_termino':data_arriendo['arriendo']['fecha_termino'] or None,
              'renta_mensual':data_arriendo['arriendo']['renta_mensual'],
+             'cuenta_fm': data_arriendo['arriendo']['cuenta_fm'],
              'garantia':data_arriendo['arriendo']['garantia'],
              'gastos_comunes_incluidos':data_arriendo['arriendo']['gastos_comunes_incluidos'],
              'estado':data_arriendo['arriendo']['estado'],
              'tipo_contrato':data_arriendo['arriendo']['tipo_contrato'],
              'forma_pago':data_arriendo['arriendo']['forma_pago'],
              'periodo_pago':data_arriendo['arriendo']['periodo_pago'],
+             'nro_cuenta': data_arriendo['arriendo']['nro_cuenta'],
+             'banco_destino': data_arriendo['arriendo']['banco_destino'],
+             'aseo_municipal': data_arriendo['arriendo']['aseo_municipal'],
+             'reajuste': data_arriendo['arriendo']['reajuste'],
+             'ggcc': data_arriendo['arriendo']['ggcc'],
+
+               
+             'honorarios_porcentaje': data_arriendo['arriendo']['honorarios_porcentaje'],
+             'titular_deposito': data_arriendo['arriendo']['titular_deposito'],
+             'quien_deposita': data_arriendo['arriendo']['quien_deposita'],
+             'correo_deposito': data_arriendo['arriendo']['correo_deposito'],
+             'dia_pago': data_arriendo['arriendo']['dia_pago'],
+             'honorarios_monto': data_arriendo['arriendo']['honorarios_monto'],
+             'tipo_cuenta': data_arriendo['arriendo']['tipo_cuenta'],
+             'rut_para_deposito': data_arriendo['arriendo']['rut_para_deposito'],
+             'cuenta_ggcc': data_arriendo['arriendo']['cuenta_ggcc'],
+             'ultimo_mes_pago': data_arriendo['arriendo']['ultimo_mes_pago'],
+             'direccion_consulta': data_arriendo['arriendo']['direccion_consulta'],
+             'periodo_anterior': data_arriendo['arriendo']['periodo_anterior'],
+             'monto_anterior': data_arriendo['arriendo']['monto_anterior'],
+             'naturaleza_bien_raiz': data_arriendo['arriendo']['naturaleza_bien_raiz'],
+
+                
+             'dfl2': data_arriendo['arriendo']['dfl2'],
+             'destino': data_arriendo['arriendo']['destino'],
+             'amoblado': data_arriendo['arriendo']['amoblado'],
              'observaciones':data_arriendo['arriendo']['observaciones']
-             
+                
         }
         arriendo_response = supabase.table("arriendo").upsert(arriendo_data).execute()
 
@@ -131,8 +156,20 @@ def guardar_arriendo(data_arriendo):
 
 
 
-def obtener_detalle_arriendo():
-    pass
+def obtener_detalle_arriendo(arriendo_id):
+    try:
+        response = supabase.rpc("obtener_detalle_arriendo", {"a_arriendo_id":arriendo_id}).execute()
+        data = response.data
+
+        if data and isinstance(data, dict):
+              return data
+         
+        logging.warning(f"No se encontró detalle para arriendo_id{arriendo_id}")
+        return None
+
+    except Exception as e:
+        logging.error(f"Error crítico al obtener arriendo{arriendo_id}: {str(e)}", exc_info=True)
+        return None
 
 
 
