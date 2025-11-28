@@ -209,17 +209,34 @@ class TabTrabajadores(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
-        # Botones
-        boton_layout = QHBoxLayout()
-        self.btn_agregar = QPushButton(" Agregar")
-        self.btn_editar = QPushButton(" Editar")
-        self.btn_eliminar = QPushButton(" Eliminar")
-        boton_layout.addWidget(self.btn_agregar)
-        boton_layout.addWidget(self.btn_editar)
-        boton_layout.addWidget(self.btn_eliminar)
-        layout.addLayout(boton_layout)
+        # -----------------------------
+        # 1. FILTROS (ARRIBA)
+        # -----------------------------
+        filtros_layout = QHBoxLayout()
 
-        # Tabla
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar por RUT o Nombre...")
+        self.search_input.textChanged.connect(self.aplicar_filtros)
+
+        self.filtro_fecha = QComboBox()
+        self.filtro_fecha.addItems([
+            "Todas las fechas",
+            "Últimos 3 meses",
+            "Últimos 6 meses",
+            "Último año"
+        ])
+        self.filtro_fecha.currentIndexChanged.connect(self.aplicar_filtros)
+
+        filtros_layout.addWidget(QLabel("Filtros:"))
+        filtros_layout.addWidget(self.search_input)
+        filtros_layout.addWidget(QLabel("Fecha ingreso:"))
+        filtros_layout.addWidget(self.filtro_fecha)
+
+        layout.addLayout(filtros_layout)
+
+        # -----------------------------
+        # 2. TABLA (CENTRO)
+        # -----------------------------
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(8)
         self.tabla.setHorizontalHeaderLabels([
@@ -228,34 +245,88 @@ class TabTrabajadores(QWidget):
         ])
         layout.addWidget(self.tabla)
 
+        # -----------------------------
+        # 3. BOTONES (ABAJO)
+        # -----------------------------
+        boton_layout = QHBoxLayout()
+        self.btn_agregar = QPushButton("Agregar")
+        self.btn_editar = QPushButton("Editar")
+        self.btn_eliminar = QPushButton("Eliminar")
+
+        boton_layout.addWidget(self.btn_agregar)
+        boton_layout.addWidget(self.btn_editar)
+        boton_layout.addWidget(self.btn_eliminar)
+
+        layout.addLayout(boton_layout)
+
         # Conexiones
         self.btn_agregar.clicked.connect(self.agregar_trabajador)
         self.btn_editar.clicked.connect(self.editar_trabajador)
         self.btn_eliminar.clicked.connect(self.eliminar_trabajador)
 
+        # Cargar datos
+        self.todo_trabajadores = []
         self.cargar_trabajadores()
 
+    # ----------------------------------------
+    # CARGAR TRABAJADORES BASE
+    # ----------------------------------------
     def cargar_trabajadores(self):
+        self.todo_trabajadores = rrhh_service.obtener_trabajadores()
+        self.aplicar_filtros()
+
+    # ----------------------------------------
+    # FILTROS
+    # ----------------------------------------
+    def aplicar_filtros(self):
+        texto = self.search_input.text().lower()
+        filtro_fechas = self.filtro_fecha.currentText()
+
+        datos = []
+
+        for t in self.todo_trabajadores:
+            rut = t.get("rut", "").lower()
+            nombre = t.get("nombre", "").lower()
+
+            if texto and texto not in rut and texto not in nombre:
+                continue
+
+            fecha_ing = QDate.fromString(t.get("fecha_ingreso", ""), "yyyy-MM-dd")
+            hoy = QDate.currentDate()
+
+            if filtro_fechas == "Últimos 3 meses" and fecha_ing < hoy.addMonths(-3):
+                continue
+            if filtro_fechas == "Últimos 6 meses" and fecha_ing < hoy.addMonths(-6):
+                continue
+            if filtro_fechas == "Último año" and fecha_ing < hoy.addYears(-1):
+                continue
+
+            datos.append(t)
+
+        self._poblar_tabla(datos)
+
+    def _poblar_tabla(self, data):
         self.tabla.setRowCount(0)
-        trabajadores = rrhh_service.obtener_trabajadores()
+
         afps = {a["id"]: a["nombre"] for a in rrhh_service.obtener_afps()}
         sistemas = {s["id"]: s["nombre"] for s in rrhh_service.obtener_sistemas_salud()}
 
-        for row, t in enumerate(trabajadores):
+        for row, t in enumerate(data):
             self.tabla.insertRow(row)
             self.tabla.setItem(row, 0, QTableWidgetItem(t.get("rut", "")))
             self.tabla.setItem(row, 1, QTableWidgetItem(t.get("nombre", "")))
-            self.tabla.setItem(row, 2, QTableWidgetItem(str(t.get("fecha_ingreso", ""))))
+            self.tabla.setItem(row, 2, QTableWidgetItem(t.get("fecha_ingreso", "")))
             self.tabla.setItem(row, 3, QTableWidgetItem(t.get("tipo_contrato", "")))
             self.tabla.setItem(row, 4, QTableWidgetItem(t.get("cargo", "")))
 
-            afp_nombre = afps.get(t.get("afp_id")) if t.get("afp_id") else ""
+            afp_nombre = afps.get(t.get("afp_id"), "")
             self.tabla.setItem(row, 5, QTableWidgetItem(afp_nombre))
 
-            sal_nombre = sistemas.get(t.get("sistema_salud_id")) if t.get("sistema_salud_id") else ""
+            sal_nombre = sistemas.get(t.get("sistema_salud_id"), "")
             self.tabla.setItem(row, 6, QTableWidgetItem(sal_nombre))
 
             self.tabla.setItem(row, 7, QTableWidgetItem(str(int(t.get("sueldo_base") or 0))))
+
 
     def _obtener_trabajador_fila(self, fila: int) -> dict | None:
         if fila < 0:
@@ -996,17 +1067,33 @@ class TabLiquidaciones(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
-        # Botones
-        boton_layout = QHBoxLayout()
-        self.btn_nueva = QPushButton(" Nueva Liquidación")
-        self.btn_ver = QPushButton(" Ver / Editar")
-        self.btn_eliminar = QPushButton(" Eliminar")
-        boton_layout.addWidget(self.btn_nueva)
-        boton_layout.addWidget(self.btn_ver)
-        boton_layout.addWidget(self.btn_eliminar)
-        layout.addLayout(boton_layout)
+        # -----------------------------
+        # 1. FILTROS (ARRIBA)
+        # -----------------------------
+        filtros_layout = QHBoxLayout()
 
-        # Tabla resumen
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar por nombre o RUT...")
+        self.search_input.textChanged.connect(self.aplicar_filtros)
+
+        self.filtro_periodo = QComboBox()
+        self.filtro_periodo.addItems([
+            "Todos los periodos",
+            "Últimos 6 meses",
+            "Último año"
+        ])
+        self.filtro_periodo.currentIndexChanged.connect(self.aplicar_filtros)
+
+        filtros_layout.addWidget(QLabel("Filtros:"))
+        filtros_layout.addWidget(self.search_input)
+        filtros_layout.addWidget(QLabel("Periodo:"))
+        filtros_layout.addWidget(self.filtro_periodo)
+
+        layout.addLayout(filtros_layout)
+
+        # -----------------------------
+        # 2. TABLA (CENTRO)
+        # -----------------------------
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
         self.tabla.setHorizontalHeaderLabels([
@@ -1015,18 +1102,62 @@ class TabLiquidaciones(QWidget):
         ])
         layout.addWidget(self.tabla)
 
+        # -----------------------------
+        # 3. BOTONES (ABAJO)
+        # -----------------------------
+        boton_layout = QHBoxLayout()
+        self.btn_nueva = QPushButton("Nueva Liquidación")
+        self.btn_ver = QPushButton("Ver / Editar")
+        self.btn_eliminar = QPushButton("Eliminar")
+
+        boton_layout.addWidget(self.btn_nueva)
+        boton_layout.addWidget(self.btn_ver)
+        boton_layout.addWidget(self.btn_eliminar)
+
+        layout.addLayout(boton_layout)
+
         # Conexiones
         self.btn_nueva.clicked.connect(self.crear_liquidacion)
         self.btn_ver.clicked.connect(self.ver_editar_liquidacion)
         self.btn_eliminar.clicked.connect(self.eliminar_liquidacion)
 
+        self.todo_liquidaciones = []
         self.cargar_liquidaciones()
 
     def cargar_liquidaciones(self):
+        self.todo_liquidaciones = rrhh_service.obtener_liquidaciones_resumen()
+        self.aplicar_filtros()
+
+    def aplicar_filtros(self):
+        texto = self.search_input.text().lower()
+        filtro = self.filtro_periodo.currentText()
+
+        filtrado = []
+
+        for l in self.todo_liquidaciones:
+            nom = l.get("trabajador_nombre", "").lower()
+            rut = l.get("trabajador_rut", "").lower()
+
+            if texto and texto not in nom and texto not in rut:
+                continue
+
+            periodo = QDate.fromString(l.get("periodo", "") + "-01", "yyyy-MM-dd")
+            hoy = QDate.currentDate()
+
+            if filtro == "Últimos 6 meses" and periodo < hoy.addMonths(-6):
+                continue
+            if filtro == "Último año" and periodo < hoy.addYears(-1):
+                continue
+
+            filtrado.append(l)
+
+        self._poblar_tabla(filtrado)
+
+    def _poblar_tabla(self, liqs):
         self.tabla.setRowCount(0)
-        liquidaciones = rrhh_service.obtener_liquidaciones_resumen()
         self._ids = []
-        for row, l in enumerate(liquidaciones):
+
+        for row, l in enumerate(liqs):
             self.tabla.insertRow(row)
             self._ids.append(l.get("id"))
             self.tabla.setItem(row, 0, QTableWidgetItem(l.get("periodo", "")))
@@ -1035,6 +1166,7 @@ class TabLiquidaciones(QWidget):
             self.tabla.setItem(row, 3, QTableWidgetItem(str(int(l.get("total_haberes") or 0))))
             self.tabla.setItem(row, 4, QTableWidgetItem(str(int(l.get("total_descuentos_general") or 0))))
             self.tabla.setItem(row, 5, QTableWidgetItem(str(int(l.get("liquido_pagar") or 0))))
+
 
     def _id_seleccionado(self) -> str | None:
         fila = self.tabla.currentRow()
