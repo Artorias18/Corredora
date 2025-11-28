@@ -1,15 +1,39 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTabWidget, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QMessageBox, QLabel, QFormLayout, QDialog, QDialogButtonBox,
-    QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox, QGroupBox, QScrollArea
-)
-from PySide6.QtCore import Qt
-
-from services import rrhh_service
-import re
+# ---- Python estándar ----
 import os
+import re
+
+# ---- Librerías externas ----
 from openpyxl import Workbook
-from PySide6.QtWidgets import QFileDialog
+
+# ---- PySide6 ----
+from PySide6.QtCore import QDate, Qt
+
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+# ---- Proyecto ----
+from services import rrhh_service
+
 
 
 # ====================================================
@@ -39,61 +63,90 @@ class DialogoTrabajador(QDialog):
 
         layout = QFormLayout(self)
 
-        # Campos básicos
+        # ===== RUT =====
         self.rut = QLineEdit(self.trabajador.get("rut", ""))
+
+        # ===== Nombre =====
         self.nombre = QLineEdit(self.trabajador.get("nombre", ""))
-        self.fecha_ingreso = QLineEdit(self.trabajador.get("fecha_ingreso", ""))  # yyyy-mm-dd
+
+        # ===== Fecha de ingreso (QDateEdit) =====
+        self.fecha_ingreso = QDateEdit()
+        self.fecha_ingreso.setCalendarPopup(True)
+
+        fecha_str = self.trabajador.get("fecha_ingreso")
+        if fecha_str:
+            try:
+                anio, mes, dia = map(int, str(fecha_str).split("-"))
+                self.fecha_ingreso.setDate(QDate(anio, mes, dia))
+            except:
+                self.fecha_ingreso.setDate(QDate.currentDate())
+        else:
+            self.fecha_ingreso.setDate(QDate.currentDate())
+
+        # ===== Tipo de contrato =====
         self.tipo_contrato = QComboBox()
         self.tipo_contrato.addItems(["Plazo Fijo", "Indefinido"])
         self.tipo_contrato.setCurrentText(self.trabajador.get("tipo_contrato", "Plazo Fijo"))
+
+        # ===== Cargo =====
         self.cargo = QLineEdit(self.trabajador.get("cargo", ""))
 
-        # AFP / Salud combos
+        # ====================================
+        # AFP
+        # ====================================
         self.afp_combo = QComboBox()
-        self.afps = rrhh_service.obtener_afps()
         self.afp_combo.addItem("-- Sin AFP --", None)
+
+        self.afps = rrhh_service.obtener_afps()
         for a in self.afps:
             self.afp_combo.addItem(a["nombre"], a["id"])
 
         afp_id_actual = self.trabajador.get("afp_id")
         if afp_id_actual:
-            index = self.afp_combo.findData(afp_id_actual)
-            if index >= 0:
-                self.afp_combo.setCurrentIndex(index)
+            idx = self.afp_combo.findData(afp_id_actual)
+            if idx >= 0:
+                self.afp_combo.setCurrentIndex(idx)
 
+        # ====================================
+        # Sistema de Salud (limpio)
+        # ====================================
         self.salud_combo = QComboBox()
-        self.sistemas_salud = rrhh_service.obtener_sistemas_salud()
         self.salud_combo.addItem("-- Sin Salud --", None)
+
+        self.sistemas_salud = rrhh_service.obtener_sistemas_salud()
         for s in self.sistemas_salud:
-            self.salud_combo.addItem(f"{s['nombre']} ({s['tipo']})", s["id"])
+            self.salud_combo.addItem(s["nombre"], s["id"])
+
         salud_id_actual = self.trabajador.get("sistema_salud_id")
         if salud_id_actual:
             idx = self.salud_combo.findData(salud_id_actual)
             if idx >= 0:
                 self.salud_combo.setCurrentIndex(idx)
 
-        # % salud y cargas
+        # % Salud
         self.porcentaje_salud = QDoubleSpinBox()
         self.porcentaje_salud.setSuffix(" %")
         self.porcentaje_salud.setDecimals(2)
         self.porcentaje_salud.setMaximum(100.0)
         self.porcentaje_salud.setValue(float(self.trabajador.get("porcentaje_salud", 7.0)))
 
+        # Cargas
         self.cargas_familiares = QSpinBox()
-        self.cargas_familiares.setMinimum(0)
-        self.cargas_familiares.setMaximum(50)
+        self.cargas_familiares.setRange(0, 50)
         self.cargas_familiares.setValue(int(self.trabajador.get("cargas_familiares", 0)))
 
-        # Sueldo base
+        # Sueldo Base
         self.sueldo_base = QDoubleSpinBox()
         self.sueldo_base.setMaximum(999_999_999)
         self.sueldo_base.setDecimals(0)
         self.sueldo_base.setValue(float(self.trabajador.get("sueldo_base", 0)))
 
-        # Formulario
+        # =====================================================
+        # FORMULARIO
+        # =====================================================
         layout.addRow("RUT:", self.rut)
         layout.addRow("Nombre:", self.nombre)
-        layout.addRow("Fecha Ingreso (YYYY-MM-DD):", self.fecha_ingreso)
+        layout.addRow("Fecha Ingreso:", self.fecha_ingreso)
         layout.addRow("Tipo Contrato:", self.tipo_contrato)
         layout.addRow("Cargo:", self.cargo)
         layout.addRow("AFP:", self.afp_combo)
@@ -102,35 +155,37 @@ class DialogoTrabajador(QDialog):
         layout.addRow("Cargas Familiares:", self.cargas_familiares)
         layout.addRow("Sueldo Base:", self.sueldo_base)
 
-        # Botones
+        # =====================================================
+        # BOTONES
+        # =====================================================
         self.botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-
-
         self.botones.accepted.connect(self.validar_y_guardar)
         self.botones.rejected.connect(self.reject)
         layout.addWidget(self.botones)
 
         self.datos = None
 
+    # =====================================================
+    # VALIDAR + GUARDAR
+    # =====================================================
     def validar_y_guardar(self):
         rut = self.rut.text().strip()
         nombre = self.nombre.text().strip()
-        fecha_ingreso = self.fecha_ingreso.text().strip()
 
         if not rut or not re.match(r"^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$", rut):
             QMessageBox.warning(self, "Error", "Ingrese un RUT válido (formato 12.345.678-9).")
             return
+
         if not nombre:
             QMessageBox.warning(self, "Error", "El nombre no puede estar vacío.")
             return
-        if not fecha_ingreso:
-            QMessageBox.warning(self, "Error", "La fecha de ingreso es obligatoria (YYYY-MM-DD).")
-            return
+
+        fecha_ing = self.fecha_ingreso.date().toString("yyyy-MM-dd")
 
         self.datos = {
             "rut": rut,
             "nombre": nombre,
-            "fecha_ingreso": fecha_ingreso,
+            "fecha_ingreso": fecha_ing,
             "tipo_contrato": self.tipo_contrato.currentText(),
             "cargo": self.cargo.text().strip(),
             "afp_id": self.afp_combo.currentData(),
@@ -142,6 +197,7 @@ class DialogoTrabajador(QDialog):
         }
 
         self.accept()
+
 
 
 # ====================================================
@@ -644,6 +700,8 @@ class DialogoLiquidacion(QDialog):
             self._cargar_liquidacion_existente()
         else:
             self._actualizar_datos_trabajador()
+    
+            
 
     # ------------------------------------------------
     # Utilidades internas
@@ -676,7 +734,87 @@ class DialogoLiquidacion(QDialog):
         porc_salud = ficha.get("porcentaje_salud")
         self.lbl_prev_tasa.setText(f"{porc_salud} %" if porc_salud is not None else "-")
 
+        # ================================
+        #   Precargar SUELDO BASE automático
+        # ================================
+        try:
+            sueldo_base_cid = "0f6be431-2c12-4765-9e73-7e563ada9f05"  # concepto SUELDO BASE
+            spin_sb = self.campos_concepto.get(sueldo_base_cid)
+
+            if spin_sb:
+                valor_sb = float(ficha.get("sueldo_base") or 0)
+
+                # Solo rellenar automáticamente si es liquidación nueva
+                if not self.liquidacion_existente:
+                    spin_sb.setValue(valor_sb)
+        except Exception as e:
+            print("Error precargando sueldo base:", e)
+
+        # ================================
+        #   Actualizar base imponible / tributable
+        # ================================
+        try:
+            base = int(ficha.get("sueldo_base") or 0)
+            self.lbl_base_imponible.setText(str(base))
+            self.lbl_base_tributable.setText(str(base))
+        except Exception as e:
+            print("Error actualizando base imponible:", e)
+
+        # Recalcular totales
         self.actualizar_totales_preview()
+
+
+                # ==================================================
+        #   Cargar tasas AFP / Salud según periodo
+        # ==================================================
+        try:
+            periodo_txt = self.periodo_edit.text().strip()
+            fecha_periodo = None
+            if periodo_txt:
+                # Convertir YYYY-MM -> YYYY-MM-01
+                fecha_periodo = periodo_txt + "-01"
+
+            # AFP
+            afp_id = ficha.get("afp_id")
+            if afp_id and fecha_periodo:
+                afp_tasa = rrhh_service.obtener_tasa_afp(afp_id, fecha_periodo)
+                if afp_tasa:
+                    self.lbl_afp_tasa.setText(f"{afp_tasa.get('tasa', 0) * 100:.2f} %")
+                else:
+                    self.lbl_afp_tasa.setText("-")
+
+            # Salud
+            salud_id = ficha.get("sistema_salud_id")
+            if salud_id and fecha_periodo:
+                sal = rrhh_service.obtener_tasa_salud(salud_id, fecha_periodo)
+                if sal:
+                    porcentaje = sal.get("porcentaje", 0)
+                    plan_fijo = sal.get("plan_fijo", 0)
+                    if plan_fijo and plan_fijo > 0:
+                        self.lbl_prev_tasa.setText(f"${plan_fijo:,}")
+                    else:
+                        self.lbl_prev_tasa.setText(f"{porcentaje * 100:.2f} %")
+        except Exception as e:
+            print("Error cargando tasas previsionales:", e)
+
+        try:
+            concepto_grati = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "GRATIFICACION":
+                    concepto_grati = cid
+                    break
+
+            if concepto_grati and not self.liquidacion_existente:
+                valor = float(ficha.get("sueldo_base") or 0) * 0.25
+                self.campos_concepto[concepto_grati].setValue(valor)
+
+        except Exception as e:
+            print("Error aplicando gratificación:", e)
+    
+
+
+        
+
 
     def _cargar_liquidacion_existente(self):
         data = self.liquidacion_existente
@@ -797,6 +935,56 @@ class DialogoLiquidacion(QDialog):
                 return
 
         self.accept()
+
+    def calcular_descuentos_automaticos(self):
+        try:
+            base = float(self.lbl_base_imponible.text() or 0)
+
+            # === AFP ===
+            concepto_afp = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "FONDO DE PENSIONES":
+                    concepto_afp = cid
+                    break
+            if concepto_afp:
+                tasa_txt = self.lbl_afp_tasa.text().replace("%","").strip()
+                tasa = float(tasa_txt) / 100 if tasa_txt else 0
+                self.campos_concepto[concepto_afp].setValue(base * tasa)
+
+            # === 7% Salud ===
+            concepto_prev = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "7% Previsión":
+                    concepto_prev = cid
+                    break
+            if concepto_prev:
+                tasa_txt = self.lbl_prev_tasa.text().replace("%","").strip()
+                if tasa_txt.isnumeric():
+                    tasa = float(tasa_txt) / 100
+                    self.campos_concepto[concepto_prev].setValue(base * tasa)
+
+            # === Adicional Isapre si aplica ===
+            concepto_adi = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "ADICIONAL ISAPRE":
+                    concepto_adi = cid
+                    break
+
+            if concepto_adi:
+                valor = 0
+                txt = self.lbl_prev_tasa.text()
+                if "$" in txt:  # Plan fijo
+                    valor = float(txt.replace("$","").replace(",",""))
+                elif "%" in txt:
+                    porcentaje = float(txt.replace("%",""))
+                    valor = base * porcentaje / 100
+                self.campos_concepto[concepto_adi].setValue(valor)
+
+        except Exception as e:
+            print("Error calculo automático:", e)
+        
+
+        
 
 
 # ====================================================
