@@ -1,15 +1,39 @@
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTabWidget, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QMessageBox, QLabel, QFormLayout, QDialog, QDialogButtonBox,
-    QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox, QGroupBox, QScrollArea
-)
-from PySide6.QtCore import Qt
-
-from services import rrhh_service
-import re
+# ---- Python estándar ----
 import os
+import re
+
+# ---- Librerías externas ----
 from openpyxl import Workbook
-from PySide6.QtWidgets import QFileDialog
+
+# ---- PySide6 ----
+from PySide6.QtCore import QDate, Qt
+
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+# ---- Proyecto ----
+from services import rrhh_service
+
 
 
 # ====================================================
@@ -39,61 +63,90 @@ class DialogoTrabajador(QDialog):
 
         layout = QFormLayout(self)
 
-        # Campos básicos
+        # ===== RUT =====
         self.rut = QLineEdit(self.trabajador.get("rut", ""))
+
+        # ===== Nombre =====
         self.nombre = QLineEdit(self.trabajador.get("nombre", ""))
-        self.fecha_ingreso = QLineEdit(self.trabajador.get("fecha_ingreso", ""))  # yyyy-mm-dd
+
+        # ===== Fecha de ingreso (QDateEdit) =====
+        self.fecha_ingreso = QDateEdit()
+        self.fecha_ingreso.setCalendarPopup(True)
+
+        fecha_str = self.trabajador.get("fecha_ingreso")
+        if fecha_str:
+            try:
+                anio, mes, dia = map(int, str(fecha_str).split("-"))
+                self.fecha_ingreso.setDate(QDate(anio, mes, dia))
+            except:
+                self.fecha_ingreso.setDate(QDate.currentDate())
+        else:
+            self.fecha_ingreso.setDate(QDate.currentDate())
+
+        # ===== Tipo de contrato =====
         self.tipo_contrato = QComboBox()
         self.tipo_contrato.addItems(["Plazo Fijo", "Indefinido"])
         self.tipo_contrato.setCurrentText(self.trabajador.get("tipo_contrato", "Plazo Fijo"))
+
+        # ===== Cargo =====
         self.cargo = QLineEdit(self.trabajador.get("cargo", ""))
 
-        # AFP / Salud combos
+        # ====================================
+        # AFP
+        # ====================================
         self.afp_combo = QComboBox()
-        self.afps = rrhh_service.obtener_afps()
         self.afp_combo.addItem("-- Sin AFP --", None)
+
+        self.afps = rrhh_service.obtener_afps()
         for a in self.afps:
             self.afp_combo.addItem(a["nombre"], a["id"])
 
         afp_id_actual = self.trabajador.get("afp_id")
         if afp_id_actual:
-            index = self.afp_combo.findData(afp_id_actual)
-            if index >= 0:
-                self.afp_combo.setCurrentIndex(index)
+            idx = self.afp_combo.findData(afp_id_actual)
+            if idx >= 0:
+                self.afp_combo.setCurrentIndex(idx)
 
+        # ====================================
+        # Sistema de Salud (limpio)
+        # ====================================
         self.salud_combo = QComboBox()
-        self.sistemas_salud = rrhh_service.obtener_sistemas_salud()
         self.salud_combo.addItem("-- Sin Salud --", None)
+
+        self.sistemas_salud = rrhh_service.obtener_sistemas_salud()
         for s in self.sistemas_salud:
-            self.salud_combo.addItem(f"{s['nombre']} ({s['tipo']})", s["id"])
+            self.salud_combo.addItem(s["nombre"], s["id"])
+
         salud_id_actual = self.trabajador.get("sistema_salud_id")
         if salud_id_actual:
             idx = self.salud_combo.findData(salud_id_actual)
             if idx >= 0:
                 self.salud_combo.setCurrentIndex(idx)
 
-        # % salud y cargas
+        # % Salud
         self.porcentaje_salud = QDoubleSpinBox()
         self.porcentaje_salud.setSuffix(" %")
         self.porcentaje_salud.setDecimals(2)
         self.porcentaje_salud.setMaximum(100.0)
         self.porcentaje_salud.setValue(float(self.trabajador.get("porcentaje_salud", 7.0)))
 
+        # Cargas
         self.cargas_familiares = QSpinBox()
-        self.cargas_familiares.setMinimum(0)
-        self.cargas_familiares.setMaximum(50)
+        self.cargas_familiares.setRange(0, 50)
         self.cargas_familiares.setValue(int(self.trabajador.get("cargas_familiares", 0)))
 
-        # Sueldo base
+        # Sueldo Base
         self.sueldo_base = QDoubleSpinBox()
         self.sueldo_base.setMaximum(999_999_999)
         self.sueldo_base.setDecimals(0)
         self.sueldo_base.setValue(float(self.trabajador.get("sueldo_base", 0)))
 
-        # Formulario
+        # =====================================================
+        # FORMULARIO
+        # =====================================================
         layout.addRow("RUT:", self.rut)
         layout.addRow("Nombre:", self.nombre)
-        layout.addRow("Fecha Ingreso (YYYY-MM-DD):", self.fecha_ingreso)
+        layout.addRow("Fecha Ingreso:", self.fecha_ingreso)
         layout.addRow("Tipo Contrato:", self.tipo_contrato)
         layout.addRow("Cargo:", self.cargo)
         layout.addRow("AFP:", self.afp_combo)
@@ -102,35 +155,37 @@ class DialogoTrabajador(QDialog):
         layout.addRow("Cargas Familiares:", self.cargas_familiares)
         layout.addRow("Sueldo Base:", self.sueldo_base)
 
-        # Botones
+        # =====================================================
+        # BOTONES
+        # =====================================================
         self.botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-
-
         self.botones.accepted.connect(self.validar_y_guardar)
         self.botones.rejected.connect(self.reject)
         layout.addWidget(self.botones)
 
         self.datos = None
 
+    # =====================================================
+    # VALIDAR + GUARDAR
+    # =====================================================
     def validar_y_guardar(self):
         rut = self.rut.text().strip()
         nombre = self.nombre.text().strip()
-        fecha_ingreso = self.fecha_ingreso.text().strip()
 
         if not rut or not re.match(r"^\d{1,2}\.\d{3}\.\d{3}-[\dkK]$", rut):
             QMessageBox.warning(self, "Error", "Ingrese un RUT válido (formato 12.345.678-9).")
             return
+
         if not nombre:
             QMessageBox.warning(self, "Error", "El nombre no puede estar vacío.")
             return
-        if not fecha_ingreso:
-            QMessageBox.warning(self, "Error", "La fecha de ingreso es obligatoria (YYYY-MM-DD).")
-            return
+
+        fecha_ing = self.fecha_ingreso.date().toString("yyyy-MM-dd")
 
         self.datos = {
             "rut": rut,
             "nombre": nombre,
-            "fecha_ingreso": fecha_ingreso,
+            "fecha_ingreso": fecha_ing,
             "tipo_contrato": self.tipo_contrato.currentText(),
             "cargo": self.cargo.text().strip(),
             "afp_id": self.afp_combo.currentData(),
@@ -144,6 +199,7 @@ class DialogoTrabajador(QDialog):
         self.accept()
 
 
+
 # ====================================================
 # PESTAÑA DE TRABAJADORES
 # ====================================================
@@ -153,17 +209,34 @@ class TabTrabajadores(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
-        # Botones
-        boton_layout = QHBoxLayout()
-        self.btn_agregar = QPushButton(" Agregar")
-        self.btn_editar = QPushButton(" Editar")
-        self.btn_eliminar = QPushButton(" Eliminar")
-        boton_layout.addWidget(self.btn_agregar)
-        boton_layout.addWidget(self.btn_editar)
-        boton_layout.addWidget(self.btn_eliminar)
-        layout.addLayout(boton_layout)
+        # -----------------------------
+        # 1. FILTROS (ARRIBA)
+        # -----------------------------
+        filtros_layout = QHBoxLayout()
 
-        # Tabla
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar por RUT o Nombre...")
+        self.search_input.textChanged.connect(self.aplicar_filtros)
+
+        self.filtro_fecha = QComboBox()
+        self.filtro_fecha.addItems([
+            "Todas las fechas",
+            "Últimos 3 meses",
+            "Últimos 6 meses",
+            "Último año"
+        ])
+        self.filtro_fecha.currentIndexChanged.connect(self.aplicar_filtros)
+
+        filtros_layout.addWidget(QLabel("Filtros:"))
+        filtros_layout.addWidget(self.search_input)
+        filtros_layout.addWidget(QLabel("Fecha ingreso:"))
+        filtros_layout.addWidget(self.filtro_fecha)
+
+        layout.addLayout(filtros_layout)
+
+        # -----------------------------
+        # 2. TABLA (CENTRO)
+        # -----------------------------
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(8)
         self.tabla.setHorizontalHeaderLabels([
@@ -172,34 +245,88 @@ class TabTrabajadores(QWidget):
         ])
         layout.addWidget(self.tabla)
 
+        # -----------------------------
+        # 3. BOTONES (ABAJO)
+        # -----------------------------
+        boton_layout = QHBoxLayout()
+        self.btn_agregar = QPushButton("Agregar")
+        self.btn_editar = QPushButton("Editar")
+        self.btn_eliminar = QPushButton("Eliminar")
+
+        boton_layout.addWidget(self.btn_agregar)
+        boton_layout.addWidget(self.btn_editar)
+        boton_layout.addWidget(self.btn_eliminar)
+
+        layout.addLayout(boton_layout)
+
         # Conexiones
         self.btn_agregar.clicked.connect(self.agregar_trabajador)
         self.btn_editar.clicked.connect(self.editar_trabajador)
         self.btn_eliminar.clicked.connect(self.eliminar_trabajador)
 
+        # Cargar datos
+        self.todo_trabajadores = []
         self.cargar_trabajadores()
 
+    # ----------------------------------------
+    # CARGAR TRABAJADORES BASE
+    # ----------------------------------------
     def cargar_trabajadores(self):
+        self.todo_trabajadores = rrhh_service.obtener_trabajadores()
+        self.aplicar_filtros()
+
+    # ----------------------------------------
+    # FILTROS
+    # ----------------------------------------
+    def aplicar_filtros(self):
+        texto = self.search_input.text().lower()
+        filtro_fechas = self.filtro_fecha.currentText()
+
+        datos = []
+
+        for t in self.todo_trabajadores:
+            rut = t.get("rut", "").lower()
+            nombre = t.get("nombre", "").lower()
+
+            if texto and texto not in rut and texto not in nombre:
+                continue
+
+            fecha_ing = QDate.fromString(t.get("fecha_ingreso", ""), "yyyy-MM-dd")
+            hoy = QDate.currentDate()
+
+            if filtro_fechas == "Últimos 3 meses" and fecha_ing < hoy.addMonths(-3):
+                continue
+            if filtro_fechas == "Últimos 6 meses" and fecha_ing < hoy.addMonths(-6):
+                continue
+            if filtro_fechas == "Último año" and fecha_ing < hoy.addYears(-1):
+                continue
+
+            datos.append(t)
+
+        self._poblar_tabla(datos)
+
+    def _poblar_tabla(self, data):
         self.tabla.setRowCount(0)
-        trabajadores = rrhh_service.obtener_trabajadores()
+
         afps = {a["id"]: a["nombre"] for a in rrhh_service.obtener_afps()}
         sistemas = {s["id"]: s["nombre"] for s in rrhh_service.obtener_sistemas_salud()}
 
-        for row, t in enumerate(trabajadores):
+        for row, t in enumerate(data):
             self.tabla.insertRow(row)
             self.tabla.setItem(row, 0, QTableWidgetItem(t.get("rut", "")))
             self.tabla.setItem(row, 1, QTableWidgetItem(t.get("nombre", "")))
-            self.tabla.setItem(row, 2, QTableWidgetItem(str(t.get("fecha_ingreso", ""))))
+            self.tabla.setItem(row, 2, QTableWidgetItem(t.get("fecha_ingreso", "")))
             self.tabla.setItem(row, 3, QTableWidgetItem(t.get("tipo_contrato", "")))
             self.tabla.setItem(row, 4, QTableWidgetItem(t.get("cargo", "")))
 
-            afp_nombre = afps.get(t.get("afp_id")) if t.get("afp_id") else ""
+            afp_nombre = afps.get(t.get("afp_id"), "")
             self.tabla.setItem(row, 5, QTableWidgetItem(afp_nombre))
 
-            sal_nombre = sistemas.get(t.get("sistema_salud_id")) if t.get("sistema_salud_id") else ""
+            sal_nombre = sistemas.get(t.get("sistema_salud_id"), "")
             self.tabla.setItem(row, 6, QTableWidgetItem(sal_nombre))
 
             self.tabla.setItem(row, 7, QTableWidgetItem(str(int(t.get("sueldo_base") or 0))))
+
 
     def _obtener_trabajador_fila(self, fila: int) -> dict | None:
         if fila < 0:
@@ -644,6 +771,8 @@ class DialogoLiquidacion(QDialog):
             self._cargar_liquidacion_existente()
         else:
             self._actualizar_datos_trabajador()
+    
+            
 
     # ------------------------------------------------
     # Utilidades internas
@@ -676,7 +805,87 @@ class DialogoLiquidacion(QDialog):
         porc_salud = ficha.get("porcentaje_salud")
         self.lbl_prev_tasa.setText(f"{porc_salud} %" if porc_salud is not None else "-")
 
+        # ================================
+        #   Precargar SUELDO BASE automático
+        # ================================
+        try:
+            sueldo_base_cid = "0f6be431-2c12-4765-9e73-7e563ada9f05"  # concepto SUELDO BASE
+            spin_sb = self.campos_concepto.get(sueldo_base_cid)
+
+            if spin_sb:
+                valor_sb = float(ficha.get("sueldo_base") or 0)
+
+                # Solo rellenar automáticamente si es liquidación nueva
+                if not self.liquidacion_existente:
+                    spin_sb.setValue(valor_sb)
+        except Exception as e:
+            print("Error precargando sueldo base:", e)
+
+        # ================================
+        #   Actualizar base imponible / tributable
+        # ================================
+        try:
+            base = int(ficha.get("sueldo_base") or 0)
+            self.lbl_base_imponible.setText(str(base))
+            self.lbl_base_tributable.setText(str(base))
+        except Exception as e:
+            print("Error actualizando base imponible:", e)
+
+        # Recalcular totales
         self.actualizar_totales_preview()
+
+
+                # ==================================================
+        #   Cargar tasas AFP / Salud según periodo
+        # ==================================================
+        try:
+            periodo_txt = self.periodo_edit.text().strip()
+            fecha_periodo = None
+            if periodo_txt:
+                # Convertir YYYY-MM -> YYYY-MM-01
+                fecha_periodo = periodo_txt + "-01"
+
+            # AFP
+            afp_id = ficha.get("afp_id")
+            if afp_id and fecha_periodo:
+                afp_tasa = rrhh_service.obtener_tasa_afp(afp_id, fecha_periodo)
+                if afp_tasa:
+                    self.lbl_afp_tasa.setText(f"{afp_tasa.get('tasa', 0) * 100:.2f} %")
+                else:
+                    self.lbl_afp_tasa.setText("-")
+
+            # Salud
+            salud_id = ficha.get("sistema_salud_id")
+            if salud_id and fecha_periodo:
+                sal = rrhh_service.obtener_tasa_salud(salud_id, fecha_periodo)
+                if sal:
+                    porcentaje = sal.get("porcentaje", 0)
+                    plan_fijo = sal.get("plan_fijo", 0)
+                    if plan_fijo and plan_fijo > 0:
+                        self.lbl_prev_tasa.setText(f"${plan_fijo:,}")
+                    else:
+                        self.lbl_prev_tasa.setText(f"{porcentaje * 100:.2f} %")
+        except Exception as e:
+            print("Error cargando tasas previsionales:", e)
+
+        try:
+            concepto_grati = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "GRATIFICACION":
+                    concepto_grati = cid
+                    break
+
+            if concepto_grati and not self.liquidacion_existente:
+                valor = float(ficha.get("sueldo_base") or 0) * 0.25
+                self.campos_concepto[concepto_grati].setValue(valor)
+
+        except Exception as e:
+            print("Error aplicando gratificación:", e)
+    
+
+
+        
+
 
     def _cargar_liquidacion_existente(self):
         data = self.liquidacion_existente
@@ -798,6 +1007,56 @@ class DialogoLiquidacion(QDialog):
 
         self.accept()
 
+    def calcular_descuentos_automaticos(self):
+        try:
+            base = float(self.lbl_base_imponible.text() or 0)
+
+            # === AFP ===
+            concepto_afp = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "FONDO DE PENSIONES":
+                    concepto_afp = cid
+                    break
+            if concepto_afp:
+                tasa_txt = self.lbl_afp_tasa.text().replace("%","").strip()
+                tasa = float(tasa_txt) / 100 if tasa_txt else 0
+                self.campos_concepto[concepto_afp].setValue(base * tasa)
+
+            # === 7% Salud ===
+            concepto_prev = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "7% Previsión":
+                    concepto_prev = cid
+                    break
+            if concepto_prev:
+                tasa_txt = self.lbl_prev_tasa.text().replace("%","").strip()
+                if tasa_txt.isnumeric():
+                    tasa = float(tasa_txt) / 100
+                    self.campos_concepto[concepto_prev].setValue(base * tasa)
+
+            # === Adicional Isapre si aplica ===
+            concepto_adi = None
+            for cid, info in self.info_concepto.items():
+                if info["nombre"] == "ADICIONAL ISAPRE":
+                    concepto_adi = cid
+                    break
+
+            if concepto_adi:
+                valor = 0
+                txt = self.lbl_prev_tasa.text()
+                if "$" in txt:  # Plan fijo
+                    valor = float(txt.replace("$","").replace(",",""))
+                elif "%" in txt:
+                    porcentaje = float(txt.replace("%",""))
+                    valor = base * porcentaje / 100
+                self.campos_concepto[concepto_adi].setValue(valor)
+
+        except Exception as e:
+            print("Error calculo automático:", e)
+        
+
+        
+
 
 # ====================================================
 #  PESTAÑA DE LIQUIDACIONES
@@ -808,17 +1067,33 @@ class TabLiquidaciones(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
 
-        # Botones
-        boton_layout = QHBoxLayout()
-        self.btn_nueva = QPushButton(" Nueva Liquidación")
-        self.btn_ver = QPushButton(" Ver / Editar")
-        self.btn_eliminar = QPushButton(" Eliminar")
-        boton_layout.addWidget(self.btn_nueva)
-        boton_layout.addWidget(self.btn_ver)
-        boton_layout.addWidget(self.btn_eliminar)
-        layout.addLayout(boton_layout)
+        # -----------------------------
+        # 1. FILTROS (ARRIBA)
+        # -----------------------------
+        filtros_layout = QHBoxLayout()
 
-        # Tabla resumen
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar por nombre o RUT...")
+        self.search_input.textChanged.connect(self.aplicar_filtros)
+
+        self.filtro_periodo = QComboBox()
+        self.filtro_periodo.addItems([
+            "Todos los periodos",
+            "Últimos 6 meses",
+            "Último año"
+        ])
+        self.filtro_periodo.currentIndexChanged.connect(self.aplicar_filtros)
+
+        filtros_layout.addWidget(QLabel("Filtros:"))
+        filtros_layout.addWidget(self.search_input)
+        filtros_layout.addWidget(QLabel("Periodo:"))
+        filtros_layout.addWidget(self.filtro_periodo)
+
+        layout.addLayout(filtros_layout)
+
+        # -----------------------------
+        # 2. TABLA (CENTRO)
+        # -----------------------------
         self.tabla = QTableWidget()
         self.tabla.setColumnCount(6)
         self.tabla.setHorizontalHeaderLabels([
@@ -827,18 +1102,62 @@ class TabLiquidaciones(QWidget):
         ])
         layout.addWidget(self.tabla)
 
+        # -----------------------------
+        # 3. BOTONES (ABAJO)
+        # -----------------------------
+        boton_layout = QHBoxLayout()
+        self.btn_nueva = QPushButton("Nueva Liquidación")
+        self.btn_ver = QPushButton("Ver / Editar")
+        self.btn_eliminar = QPushButton("Eliminar")
+
+        boton_layout.addWidget(self.btn_nueva)
+        boton_layout.addWidget(self.btn_ver)
+        boton_layout.addWidget(self.btn_eliminar)
+
+        layout.addLayout(boton_layout)
+
         # Conexiones
         self.btn_nueva.clicked.connect(self.crear_liquidacion)
         self.btn_ver.clicked.connect(self.ver_editar_liquidacion)
         self.btn_eliminar.clicked.connect(self.eliminar_liquidacion)
 
+        self.todo_liquidaciones = []
         self.cargar_liquidaciones()
 
     def cargar_liquidaciones(self):
+        self.todo_liquidaciones = rrhh_service.obtener_liquidaciones_resumen()
+        self.aplicar_filtros()
+
+    def aplicar_filtros(self):
+        texto = self.search_input.text().lower()
+        filtro = self.filtro_periodo.currentText()
+
+        filtrado = []
+
+        for l in self.todo_liquidaciones:
+            nom = l.get("trabajador_nombre", "").lower()
+            rut = l.get("trabajador_rut", "").lower()
+
+            if texto and texto not in nom and texto not in rut:
+                continue
+
+            periodo = QDate.fromString(l.get("periodo", "") + "-01", "yyyy-MM-dd")
+            hoy = QDate.currentDate()
+
+            if filtro == "Últimos 6 meses" and periodo < hoy.addMonths(-6):
+                continue
+            if filtro == "Último año" and periodo < hoy.addYears(-1):
+                continue
+
+            filtrado.append(l)
+
+        self._poblar_tabla(filtrado)
+
+    def _poblar_tabla(self, liqs):
         self.tabla.setRowCount(0)
-        liquidaciones = rrhh_service.obtener_liquidaciones_resumen()
         self._ids = []
-        for row, l in enumerate(liquidaciones):
+
+        for row, l in enumerate(liqs):
             self.tabla.insertRow(row)
             self._ids.append(l.get("id"))
             self.tabla.setItem(row, 0, QTableWidgetItem(l.get("periodo", "")))
@@ -847,6 +1166,7 @@ class TabLiquidaciones(QWidget):
             self.tabla.setItem(row, 3, QTableWidgetItem(str(int(l.get("total_haberes") or 0))))
             self.tabla.setItem(row, 4, QTableWidgetItem(str(int(l.get("total_descuentos_general") or 0))))
             self.tabla.setItem(row, 5, QTableWidgetItem(str(int(l.get("liquido_pagar") or 0))))
+
 
     def _id_seleccionado(self) -> str | None:
         fila = self.tabla.currentRow()
