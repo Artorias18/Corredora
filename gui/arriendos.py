@@ -155,8 +155,7 @@ class DetalleArriendoWindow(QWidget):
             ("Total Imponible", evaluacion.get('total_imponible')),
             ("Total no Imponible", evaluacion.get('total_no_imponible')),
             ("Descuentos Legales", evaluacion.get('descuentos_legales')),
-            ("Renta Tributable", evaluacion.get('rta_tributable')),
-            ("Impuesto Renta", evaluacion.get('rta_tributable')),
+            ("Impuesto Renta", evaluacion.get('im_renta')),
             ("Total Haberes", evaluacion.get('total_haberes')),
             ("Líquido a Pago", evaluacion.get('liquido_pago')),
             ("Anticipo", evaluacion.get('anticipo')),
@@ -577,6 +576,7 @@ class FormularioArriendo(QWidget):
     def __init__(self,arriendo_id=None, parent=None):
         super().__init__(parent)
         self.arriendo_id = arriendo_id
+        self.rentas_tributables = []
 
         self.setWindowTitle("Editar Arriendo" if arriendo_id else "Nuevo Arriendo")
         self.resize(900, 700)
@@ -744,6 +744,13 @@ class FormularioArriendo(QWidget):
         self.fecha_evaluacion_arrendatario.setCalendarPopup(True)
 
         layout.addRow(self.crear_label("Fecha Evaluación:"), self.fecha_evaluacion_arrendatario)
+
+        self.txt_impuesto_renta = QLineEdit()
+        layout.addRow(self.crear_label("Impuesto Renta"), self.txt_impuesto_renta)
+
+        self.btn_calcular_impuesto = QPushButton("Calcular Impuesto Renta")
+        self.btn_calcular_impuesto.clicked.connect(self.abrir_dialogo_impuesto)
+        layout.addRow(self.btn_calcular_impuesto)
 
         self.tbl_evaluacion = QTableWidget()
         self.tbl_evaluacion.setRowCount(9)
@@ -916,7 +923,7 @@ class FormularioArriendo(QWidget):
             "descuentos_legales",
             "desc_varios",
             "anticipo",
-            "liquido_pago"
+            "liquido_pago",
         ]
 
         datos = {}
@@ -933,6 +940,17 @@ class FormularioArriendo(QWidget):
             datos[clave] = valor
 
         return datos
+    
+
+    def abrir_dialogo_impuesto(self):
+        datos_eval = self.obtener_diccionario_evaluacion()
+        renta_tributable = datos_eval.get("total_imponible", 0.0)
+
+
+        dialog = ImpuestoRentaDialog(renta_tributable, self)
+
+        if dialog.exec():
+            self.txt_impuesto_renta.setText(str(dialog.resultado))
 
 
 
@@ -1203,6 +1221,7 @@ class FormularioArriendo(QWidget):
                     'liquido_pago': valores_tabla.get('liquido_pago', 0),
                     'anticipo': valores_tabla.get('anticipo', 0),
                     'desc_varios': valores_tabla.get('desc_varios', 0),
+                    'im_renta': self.txt_impuesto_renta.text(),
                     'locomocion': valores_tabla.get('locomocion', 0)
 
 
@@ -1552,6 +1571,7 @@ class FormularioMes(QDialog):
         # 9) Líquido a pago
         liquido = total_haberes - descuentos_legales - descuentos_varios_total - anticipo
 
+
         return {
             "tope_gratificacion": tope_grat,
             "gratificacion": gratificacion,
@@ -1576,3 +1596,51 @@ class FormularioMes(QDialog):
         }
 
         self.accept()
+    
+class ImpuestoRentaDialog(QDialog):
+    def __init__(self, renta_tributable, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Calcular Impuesto a la Renta")
+
+        self.renta_tributable = renta_tributable
+        self.resultado = None  # ← aquí guardaremos el cálculo final
+
+        layout = QFormLayout()
+
+        # Campo RT (solo lectura)
+        self.txt_rt = QLineEdit(str(renta_tributable))
+        self.txt_rt.setReadOnly(True)
+        layout.addRow("Renta Tributable:", self.txt_rt)
+
+        # Campos editables
+        self.txt_multiplicador = QLineEdit()
+        layout.addRow("Tasa:", self.txt_multiplicador)
+
+        self.txt_resta = QLineEdit()
+        layout.addRow("Rebaja:", self.txt_resta)
+
+        # Botones
+        btn_calcular = QPushButton("Calcular")
+        btn_cancelar = QPushButton("Cancelar")
+
+        btn_calcular.clicked.connect(self.calcular)
+        btn_cancelar.clicked.connect(self.reject)
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(btn_calcular)
+        hbox.addWidget(btn_cancelar)
+
+        layout.addRow(hbox)
+        self.setLayout(layout)
+
+    def calcular(self):
+        try:
+            rt = float(self.renta_tributable)
+            multiplicador = float(self.txt_multiplicador.text())
+            resta = float(self.txt_resta.text())
+
+            self.resultado = (rt * multiplicador) - resta
+            self.accept()
+
+        except ValueError:
+            pass  # puedes mostrar un QMessageBox si quieres
