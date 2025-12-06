@@ -1600,13 +1600,11 @@ class FormularioVenta(QWidget):
     
     
     def guardar_venta(self):
-        print("guardar_venta llamada")
         try:
             # Validar campos obligatorios
             if not self.validar_campos_obligatorios():
                 print("Validación falló, no se guarda")
                 return
-            print("Validación correcta, preparando datos")
             # Preparar datos de la venta
 
             texto_estado = self.cmb_estado.currentText().lower()

@@ -435,91 +435,23 @@ class DashboardArriendos(QWidget):
         self.ventana_detalle = DetalleArriendoWindow(arriendo_id)
         self.ventana_detalle.show()
 
-    def generar_excel_finanzas(self, df, ruta):
-        """
-        Genera el Excel con formato bonito.
-        """
-        
+    def generar_excel_finanzas(self, datos, ruta):
         wb = Workbook()
-        ws = wb.active
-        ws.title = "Arriendos"
-
-        # Título
-        ws.merge_cells("A1:R1")
-        titulo = ws["A1"]
-        titulo.value = "CONSOLIDADO DE ARRIENDOS"
-        titulo.font = Font(size=16, bold=True)
-        titulo.alignment = Alignment(horizontal="center")
-
-        # Insertar DataFrame
-        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 3):
-            for c_idx, value in enumerate(row, 1):
-                ws.cell(row=r_idx, column=c_idx, value=value)
-
-        # Estilo cabeceras
-        header_fill = PatternFill("solid", fgColor="D9D9D9")
-        for cell in ws[3]:
-            cell.font = Font(bold=True)
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal="center")
-            cell.border = Border(
-                left=Side(style="thin"),
-                right=Side(style="thin"),
-                top=Side(style="thin"),
-                bottom=Side(style="thin")
-            )
-
-        # Ajuste seguro de anchos (sin errores por merged cells)
-        for col_idx, column_cells in enumerate(ws.columns, 1):
-            max_length = 0
-            for cell in column_cells:
-                if cell.value:
-                    try:
-                        max_length = max(max_length, len(str(cell.value)))
-                    except:
-                        pass
-            col_letter = get_column_letter(col_idx)
-            ws.column_dimensions[col_letter].width = max_length + 3
-
-        wb.save(ruta)
-
-
-    #### ---------------- EXPORTADOR ---------------- ####
-
-    def exportar_excel(self):
-        """
-        Exporta Excel directamente desde Supabase, 
-        incluyendo toda la información de arriendos.
-        """
-
-        datos = obtener_arriendos_finanzas()
-
-        if not datos:
-            QMessageBox.warning(self, "Sin datos", "No se encontraron arriendos para exportar.")
-            return
-
-        columnas = [
-            "ROL", "COMUNA", "DIRECCION", "NRO DEPARTAMENTO",
-            "NOMBRE ARRENDATARIO", "RUT ARRENDATARIO",
-            "MONTO RENTA", "ESTADO",
-            "FECHA INICIO", "FECHA TERMINO",
-            "NOMBRE PROPIETARIO", "RUT PROPIETARIO",
-            "CORREO ARRENDATARIO", "TELEFONO",
-            "TIPO PAGO", "GASTO COMUN", "GARANTIA"
-        ]
+        wb.remove(wb.active)
 
         df = pd.DataFrame(datos)
 
-        # 🔹 Convertir booleano a texto legible
+        if "id" in df.columns:
+            df.drop(columns=["id"], inplace=True)
+
+        # Convertir booleano GC incluido
         if "gastos_comunes_incluidos" in df.columns:
-            df["gastos_comunes"] = df["gastos_comunes_incluidos"].apply(
+            df["GASTO COMUN"] = df["gastos_comunes_incluidos"].apply(
                 lambda x: "Incluido" if x else "No incluido"
             )
-        else:
-            df["gastos_comunes"] = ""
 
         # Renombrar columnas
-        df_final = df.rename(columns={
+        df.rename(columns={
             "rol": "ROL",
             "comuna": "COMUNA",
             "direccion": "DIRECCION",
@@ -534,16 +466,143 @@ class DashboardArriendos(QWidget):
             "correo_arrendatario": "CORREO ARRENDATARIO",
             "telefono_arrendatario": "TELEFONO",
             "forma_pago": "TIPO PAGO",
-            "gastos_comunes": "GASTO COMUN",
             "garantia": "GARANTIA"
-        })
+        }, inplace=True)
 
-        df_final = df_final.reindex(columns=columnas)
+        df["FECHA INICIO"] = pd.to_datetime(df["FECHA INICIO"])
+        df["FECHA TERMINO"] = pd.to_datetime(df["FECHA TERMINO"])
+
+        años = sorted(df["FECHA INICIO"].dt.year.unique(), reverse=True)
+
+        # Estilos
+        bold = Font(bold=True)
+        header_fill = PatternFill(start_color="D9D9D9", fill_type="solid")
+        center = Alignment(horizontal="center", vertical="center")
+        border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin")
+        )
+
+        hojas_por_año = {}
+
+        # ============================================
+        #   GENERAR HOJAS POR AÑO
+        # ============================================
+        for año in años:
+            ws = wb.create_sheet(f"Arriendos {año}")
+            hojas_por_año[año] = ws
+
+            df_año = df[df["FECHA INICIO"].dt.year == año]
+            df_vigentes = df_año[df_año["ESTADO"] == "Vigente"]
+            df_finalizados = df_año[df_año["ESTADO"] != "Vigente"]
+
+            # Título centrado
+            ws.merge_cells("A1:R1")
+            t = ws["A1"]
+            t.value = f"Arriendos del Año {año}"
+            t.font = Font(size=16, bold=True)
+            t.alignment = center
+
+            row_cursor = 3
+
+            # ===============================
+            #  FUNCIÓN PARA INSERTAR UNA TABLA
+            # ===============================
+            def insertar_tabla(df_tabla, titulo):
+                nonlocal row_cursor
+
+                # Subtítulo centrado encima de la tabla
+                ws.merge_cells(start_row=row_cursor, start_column=1,
+                            end_row=row_cursor, end_column=len(df.columns))
+                cell_title = ws.cell(row=row_cursor, column=1, value=titulo)
+                cell_title.font = Font(bold=True, size=14)
+                cell_title.alignment = center
+                row_cursor += 1
+
+                # Crear tabla
+                for r_idx, row in enumerate(dataframe_to_rows(df_tabla, index=False, header=True), row_cursor):
+                    for c_idx, value in enumerate(row, 1):
+                        c = ws.cell(row=r_idx, column=c_idx, value=value)
+
+                        # Cabeceras
+                        if r_idx == row_cursor:
+                            c.font = bold
+                            c.fill = header_fill
+                            c.alignment = center
+
+                        c.border = border
+
+                row_cursor += len(df_tabla) + 2
+
+            # ---- TABLAS ----
+            if not df_vigentes.empty:
+                insertar_tabla(df_vigentes, "ARRIENDOS VIGENTES")
+
+            if not df_finalizados.empty:
+                insertar_tabla(df_finalizados, "ARRIENDOS FINALIZADOS")
+
+            hojas_por_año[año] = (ws, row_cursor)
+
+        # ============================================
+        #   CONTINUIDAD EN LA HOJA DEL AÑO ACTUAL
+        # ============================================
+        año_actual = max(años)
+        ws, row_cursor = hojas_por_año[año_actual]
+
+        df_cont = df[(df["FECHA INICIO"].dt.year < año_actual) & (df["ESTADO"] == "Vigente")]
+
+        if not df_cont.empty:
+
+            # Título centrado
+            ws.merge_cells(start_row=row_cursor, start_column=1,
+                        end_row=row_cursor, end_column=len(df.columns))
+            t2 = ws.cell(row=row_cursor, column=1, value=f"CONTINUIDAD DESDE {año_actual - 1}")
+            t2.font = Font(bold=True, size=14)
+            t2.alignment = center
+
+            row_cursor += 2
+
+            # Tabla de continuidad
+            for r_idx, row in enumerate(dataframe_to_rows(df_cont, index=False, header=True), row_cursor):
+                for c_idx, value in enumerate(row, 1):
+                    c = ws.cell(row=r_idx, column=c_idx, value=value)
+
+                    if r_idx == row_cursor:
+                        c.font = bold
+                        c.fill = header_fill
+                        c.alignment = center
+
+                    c.border = border
+
+            row_cursor += len(df_cont) + 2
+
+        # ============================================
+        #   AJUSTAR ANCHOS
+        # ============================================
+        for ws in wb.worksheets:
+            for col_idx, column_cells in enumerate(ws.columns, 1):
+                length = 0
+                for cell in column_cells:
+                    if cell.value:
+                        length = max(length, len(str(cell.value)))
+                ws.column_dimensions[get_column_letter(col_idx)].width = length + 3
+
+        wb.save(ruta)
+    #### ---------------- EXPORTADOR ---------------- ####
+
+    def exportar_excel(self):
+        datos = obtener_arriendos_finanzas()
+
+        if not datos:
+            QMessageBox.warning(self, "Sin datos", "No se encontraron arriendos para exportar.")
+            return
 
         ruta, _ = QFileDialog.getSaveFileName(
             self,
             "Guardar Excel",
-            "conglomerado_arriendos",
+            "consolidado_arriendos",
             "Archivos Excel (*.xlsx)"
         )
 
@@ -554,9 +613,8 @@ class DashboardArriendos(QWidget):
             ruta += ".xlsx"
 
         try:
-            self.generar_excel_finanzas(df_final, ruta)
+            self.generar_excel_finanzas(datos, ruta)
             QMessageBox.information(self, "Éxito", f"Excel generado correctamente:\n{ruta}")
-
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al generar Excel:\n{e}")
 
@@ -614,10 +672,25 @@ class FormularioArriendo(QWidget):
         tab_evaluacion = QWidget()
         self.tabs.addTab(tab_evaluacion, "Evaluación")
         self.setup_tab_evaluacion(tab_evaluacion)
+        self.setup_tab_evaluacion_index = self.tabs.indexOf(tab_evaluacion)
+
+        tab_evaluacion_independiente = QWidget()
+        self.tabs.addTab(tab_evaluacion_independiente, "Evaluación")
+        self.setup_tab_evaluacion_independiente(tab_evaluacion_independiente)
+        self.setup_tab_evaluacion_independiente_index = self.tabs.indexOf(tab_evaluacion_independiente )
 
         tab_arriendo = QWidget()
         self.tabs.addTab(tab_arriendo, "Arriendo")
         self.setup_tab_arriendo(tab_arriendo)
+
+
+        self.cmb_tipo_trabajador.currentTextChanged.connect(self.toggle_evaluacion_tab)
+        self.toggle_evaluacion_tab(self.cmb_tipo_trabajador.currentText())
+
+        self.cmb_tipo_trabajador.currentTextChanged.connect(self.toggle_evaluacion_independiente_tab)
+        self.toggle_evaluacion_independiente_tab(self.cmb_tipo_trabajador.currentText())
+
+        
 
 
         btn_guardar = QPushButton("Guardar Arriendo")
@@ -659,6 +732,8 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Dirección:"), self.txt_arren_direccion)
         layout.addRow(self.crear_label("Teléfono:"), self.txt_arren_telefono)
         layout.addRow(self.crear_label("Email:"), self.txt_arren_email)
+
+
 
     def setup_tab_arrendatario(self, tab):
         layout = QFormLayout(tab)
@@ -702,6 +777,20 @@ class FormularioArriendo(QWidget):
         layout.addRow(self.crear_label("Estado de Evaluación:"), self.cmb_evaluacion_estado)
         layout.addRow(self.crear_label("Fecha Evaluación:"), self.fecha_evaluacion)
         layout.addRow(self.crear_label("Renta Mensual:"), self.txt_renta)
+
+
+
+    def toggle_evaluacion_tab(self, tipo_trabajador):
+        if not hasattr(self,'setup_tab_evaluacion_index'):
+            return
+        mostrar = tipo_trabajador == "Dependiente"
+        self.tabs.setTabVisible(self.setup_tab_evaluacion_index, mostrar)
+
+    def toggle_evaluacion_independiente_tab(self, tipo_trabajador):
+        if not hasattr(self, 'setup_tab_evaluacion_independiente_index'):
+            return
+        mostrar = tipo_trabajador == "Independiente"
+        self.tabs.setTabVisible(self.setup_tab_evaluacion_independiente_index, mostrar)
                 
 
     def setup_tab_propiedad(self, tab):
@@ -821,6 +910,8 @@ class FormularioArriendo(QWidget):
         # Agregar contenedor al layout final
         layout.addRow(contenedor)
 
+    def setup_tab_evaluacion_independiente(self, tab):
+        pass
 
     def abrir_formulario_mes(self, mes):
         dlg = FormularioMes(mes, self)
