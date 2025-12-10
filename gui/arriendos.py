@@ -450,6 +450,9 @@ class DashboardArriendos(QWidget):
                 lambda x: "Incluido" if x else "No incluido"
             )
 
+        fill_verde = PatternFill(start_color="C6EFCE", fill_type="solid")  # verde claro
+        fill_rojo = PatternFill(start_color="FFC7CE", fill_type="solid") 
+
         # Renombrar columnas
         df.rename(columns={
             "rol": "ROL",
@@ -513,7 +516,13 @@ class DashboardArriendos(QWidget):
             def insertar_tabla(df_tabla, titulo):
                 nonlocal row_cursor
 
+                if "VIGENTES" in titulo:
+                    fill_fila = fill_verde
+                else:
+                    fill_fila = fill_rojo
                 # Subtítulo centrado encima de la tabla
+                
+                # Subtítulo centrado
                 ws.merge_cells(start_row=row_cursor, start_column=1,
                             end_row=row_cursor, end_column=len(df.columns))
                 cell_title = ws.cell(row=row_cursor, column=1, value=titulo)
@@ -523,14 +532,19 @@ class DashboardArriendos(QWidget):
 
                 # Crear tabla
                 for r_idx, row in enumerate(dataframe_to_rows(df_tabla, index=False, header=True), row_cursor):
+                    fila_es_header = (r_idx == row_cursor)
+
                     for c_idx, value in enumerate(row, 1):
                         c = ws.cell(row=r_idx, column=c_idx, value=value)
 
-                        # Cabeceras
-                        if r_idx == row_cursor:
+                        # Cabecera
+                        if fila_es_header:
                             c.font = bold
                             c.fill = header_fill
                             c.alignment = center
+                        else:
+                            # Pintar la fila (solo datos)
+                            c.fill = fill_fila
 
                         c.border = border
 
