@@ -435,7 +435,7 @@ class DashboardArriendos(QWidget):
         self.ventana_detalle = DetalleArriendoWindow(arriendo_id)
         self.ventana_detalle.show()
 
-    def generar_excel_finanzas(self, datos, ruta):
+    def generar_excel_finanzas(self, datos, ruta, factor_actualizacion=None):
         wb = Workbook()
         wb.remove(wb.active)
 
@@ -509,6 +509,16 @@ class DashboardArriendos(QWidget):
             t.alignment = center
 
             row_cursor = 3
+
+            if factor_actualizacion is not None:
+                ws.merge_cells(start_row=row_cursor, start_column=1, end_row=row_cursor, end_column=4)
+                ws.cell(row=row_cursor, column=1, value="Factor de actualización")
+                ws.cell(row=row_cursor, column=1).font = Font(bold=True)
+
+                ws.merge_cells(start_row=row_cursor, start_column=5, end_row=row_cursor, end_column=6)
+                ws.cell(row=row_cursor, column=5, value=factor_actualizacion)
+
+                row_cursor += 2
 
             # ===============================
             #  FUNCIÓN PARA INSERTAR UNA TABLA
@@ -626,8 +636,13 @@ class DashboardArriendos(QWidget):
         if not ruta.endswith(".xlsx"):
             ruta += ".xlsx"
 
+        factor_actualizacion = self.spin_factor_actualizacion.value()
         try:
-            self.generar_excel_finanzas(datos, ruta)
+            self.generar_excel_finanzas(
+            datos,
+            ruta,
+            factor_actualizacion=factor_actualizacion
+            )
             QMessageBox.information(self, "Éxito", f"Excel generado correctamente:\n{ruta}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al generar Excel:\n{e}")
@@ -854,6 +869,18 @@ class FormularioArriendo(QWidget):
         self.btn_calcular_impuesto = QPushButton("Calcular Impuesto Renta")
         self.btn_calcular_impuesto.clicked.connect(self.abrir_dialogo_impuesto)
         layout.addRow(self.btn_calcular_impuesto)
+
+
+        self.spin_factor_actualizacion = QDoubleSpinBox()
+        self.spin_factor_actualizacion.setDecimals(4)
+        self.spin_factor_actualizacion.setRange(0.0, 10.0)
+        self.spin_factor_actualizacion.setSingleStep(0.01)
+        self.spin_factor_actualizacion.setValue(1.0)
+
+        layout.addRow(
+            self.crear_label("Factor de actualización"),
+            self.spin_factor_actualizacion
+        )
 
         self.tbl_evaluacion = QTableWidget()
         self.tbl_evaluacion.setRowCount(9)
