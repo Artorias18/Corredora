@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QHeaderView,QGroupBox ,QSizePolicy, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
+from PySide6.QtWidgets import QHeaderView,QGroupBox ,QDialogButtonBox,QSizePolicy, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
 from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
@@ -510,15 +510,40 @@ class DashboardArriendos(QWidget):
 
             row_cursor = 3
 
-            if factor_actualizacion is not None:
-                ws.merge_cells(start_row=row_cursor, start_column=1, end_row=row_cursor, end_column=4)
-                ws.cell(row=row_cursor, column=1, value="Factor de actualización")
-                ws.cell(row=row_cursor, column=1).font = Font(bold=True)
+            if factor_actualizacion:
+                ws.merge_cells("A3:D3")
+                ws["A3"] = "TOTAL ARRIENDO CON FACTOR ACTUALIZACIÓN"
+                ws["A3"].font = Font(bold=True)
 
-                ws.merge_cells(start_row=row_cursor, start_column=5, end_row=row_cursor, end_column=6)
-                ws.cell(row=row_cursor, column=5, value=factor_actualizacion)
+                ws.append([
+                    "Mes",
+                    "Factor de actualización",
+                    "Monto del arriendo",
+                    "Total"
+                ])
 
-                row_cursor += 2
+                for fila in ws[4]:
+                    fila.font = bold
+                    fila.alignment = center
+                    fila.border = border
+
+                total_monto = 0
+                total_actualizado = 0
+
+                for f in factor_actualizacion:
+                    ws.append([
+                        f["mes"],
+                        f["factor"],
+                        f["monto"],
+                        f["total"]
+                    ])
+                    total_monto += f["monto"]
+                    total_actualizado += f["total"]
+
+                ws.append([
+                    "Total anual", "", total_monto, total_actualizado
+                ])
+
 
             # ===============================
             #  FUNCIÓN PARA INSERTAR UNA TABLA
@@ -636,12 +661,11 @@ class DashboardArriendos(QWidget):
         if not ruta.endswith(".xlsx"):
             ruta += ".xlsx"
 
-        factor_actualizacion = self.spin_factor_actualizacion.value()
+        
         try:
             self.generar_excel_finanzas(
             datos,
             ruta,
-            factor_actualizacion=factor_actualizacion
             )
             QMessageBox.information(self, "Éxito", f"Excel generado correctamente:\n{ruta}")
         except Exception as e:
@@ -870,17 +894,10 @@ class FormularioArriendo(QWidget):
         self.btn_calcular_impuesto.clicked.connect(self.abrir_dialogo_impuesto)
         layout.addRow(self.btn_calcular_impuesto)
 
+        self.btn_agregar_factor_actualizacion = QPushButton("Agregar Factor Actualización")
+        self.btn_agregar_factor_actualizacion.clicked.connect(self.abrir_factor_actualizacion)
+        layout.addRow(self.btn_agregar_factor_actualizacion)
 
-        self.spin_factor_actualizacion = QDoubleSpinBox()
-        self.spin_factor_actualizacion.setDecimals(4)
-        self.spin_factor_actualizacion.setRange(0.0, 10.0)
-        self.spin_factor_actualizacion.setSingleStep(0.01)
-        self.spin_factor_actualizacion.setValue(1.0)
-
-        layout.addRow(
-            self.crear_label("Factor de actualización"),
-            self.spin_factor_actualizacion
-        )
 
         self.tbl_evaluacion = QTableWidget()
         self.tbl_evaluacion.setRowCount(9)
@@ -1085,7 +1102,12 @@ class FormularioArriendo(QWidget):
             self.txt_impuesto_renta.setText(str(dialog.resultado))
 
 
+    def abrir_factor_actualizacion(self):
+        renta = self.detalle_arriendo["renta_mensual"]
 
+        dialog = DialogFactorActualizacion(renta, self)
+        if dialog.exec():
+            self.factores_actualizacion = dialog.resultado
                 
             
 
@@ -1776,3 +1798,91 @@ class ImpuestoRentaDialog(QDialog):
 
         except ValueError:
             pass  # puedes mostrar un QMessageBox si quieres
+
+
+class DialogFactorActualizacion(QDialog):
+    def __init__(self, renta_mensual, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Factor de actualización de arriendos")
+        self.resize(650, 420)
+
+        self.renta_mensual = renta_mensual
+        self.resultado = []
+
+        layout = QVBoxLayout(self)
+
+        self.tabla = QTableWidget(12, 4)
+        self.tabla.setHorizontalHeaderLabels([
+            "Mes",
+            "Factor de actualización",
+            "Monto del arriendo",
+            "Total"
+        ])
+
+        meses = [
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        ]
+
+        for row, mes in enumerate(meses):
+            # Mes
+            item_mes = QTableWidgetItem(mes)
+            item_mes.setFlags(Qt.ItemIsEnabled)
+            self.tabla.setItem(row, 0, item_mes)
+
+            # Factor
+            factor = QDoubleSpinBox()
+            factor.setDecimals(3)
+            factor.setRange(0.5, 5)
+            factor.setSingleStep(0.001)
+            factor.setValue(1.0)
+            factor.valueChanged.connect(
+                lambda _, r=row: self.calcular_total(r)
+            )
+            self.tabla.setCellWidget(row, 1, factor)
+
+            # Monto (desde BD)
+            item_monto = QTableWidgetItem(f"{self.renta_mensual:,}")
+            item_monto.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            item_monto.setFlags(Qt.ItemIsEnabled)
+            self.tabla.setItem(row, 2, item_monto)
+
+            # Total
+            item_total = QTableWidgetItem("")
+            item_total.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            item_total.setFlags(Qt.ItemIsEnabled)
+            self.tabla.setItem(row, 3, item_total)
+
+        self.tabla.resizeColumnsToContents()
+        layout.addWidget(self.tabla)
+
+        botones = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        )
+        botones.accepted.connect(self.guardar)
+        botones.rejected.connect(self.reject)
+        layout.addWidget(botones)
+
+
+    def calcular_total(self, row):
+        factor = self.tabla.cellWidget(row, 1).value()
+        total = int(self.renta_mensual * factor)
+        self.tabla.item(row, 3).setText(f"{total:,}")
+
+    def guardar(self):
+        self.resultado.clear()
+
+        for row in range(12):
+            mes = self.tabla.item(row, 0).text()
+            factor = self.tabla.cellWidget(row, 1).value()
+            monto = self.renta_mensual
+            total = int(monto * factor)
+
+            self.resultado.append({
+                "mes": mes,
+                "factor": factor,
+                "monto": monto,
+                "total": total
+            })
+
+        self.accept()
