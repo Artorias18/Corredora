@@ -4,6 +4,8 @@ import re
 
 # ---- Librerías externas ----
 from openpyxl import Workbook
+from openpyxl.styles import Font, Border, Side, Alignment
+from PySide6.QtWidgets import QFileDialog
 
 # ---- PySide6 ----
 from PySide6.QtCore import QDate, Qt
@@ -383,15 +385,18 @@ class DialogoLiquidacion(QDialog):
 
 
     def exportar_excel(self):
-        """
-        Genera un Excel similar al ejemplo proporcionado.
-        Exporta todos los haberes, descuentos, totales y datos adicionales.
-        """
-        # --- Seleccionar ruta ---
+        trabajador = self.trabajador_combo.currentData()
+        if not isinstance(trabajador, dict):
+            QMessageBox.warning(self, "Error", "Trabajador inválido.")
+            return
+
+        periodo = self.periodo_edit.text()
+        rut = trabajador.get("rut", "")
+
         ruta, _ = QFileDialog.getSaveFileName(
             self,
             "Guardar liquidación",
-            f"Liquidacion_{self.periodo_edit.text()}_{self.lbl_rut.text()}.xlsx",
+            f"Liquidacion_{periodo}_{rut}.xlsx",
             "Excel (*.xlsx)"
         )
         if not ruta:
@@ -401,169 +406,206 @@ class DialogoLiquidacion(QDialog):
         ws = wb.active
         ws.title = "Liquidación"
 
-        fila = 1
+        # =========================
+        # ESTILOS
+        # =========================
+        bold = Font(bold=True)
+        big_bold = Font(bold=True, size=12)
+        center = Alignment(horizontal="center")
+        right = Alignment(horizontal="right")
 
-        # =======================
-        #   TITULO
-        # =======================
-        ws["A1"] = "LIQUIDACIÓN DE SUELDO"
-        fila += 2
+        thin = Side(style="thin")
+        border_top = Border(top=thin)
+        border_double = Border(top=Side(style="double"))
 
-        # =======================
-        #   HABERES IMPONIBLES
-        # =======================
-        ws[f"A{fila}"] = "HABERES IMPONIBLES"
-        fila += 1
+        moneda = "$ #,##0"
 
-        for cid, spin in self.campos_concepto.items():
-            info = self.info_concepto[cid]
-            if info["grupo"] == "haber_imponible":
-                ws[f"A{fila}"] = info["nombre"]
-                ws[f"B{fila}"] = int(spin.value())
-                fila += 1
+        # =========================
+        # COLUMNAS
+        # =========================
+        ws.column_dimensions["A"].width = 36
+        ws.column_dimensions["B"].width = 14
+        ws.column_dimensions["C"].width = 3
+        ws.column_dimensions["D"].width = 36
+        ws.column_dimensions["E"].width = 14
+        ws.column_dimensions["F"].width = 3
+        ws.column_dimensions["G"].width = 28
+        ws.column_dimensions["H"].width = 14
 
-        fila += 1
-        ws[f"A{fila}"] = "TOTAL HABERES IMPONIBLES"
-        ws[f"B{fila}"] = int(self.lbl_total_hab_impon.text())
-        fila += 2
+        # =========================
+        # ENCABEZADO
+        # =========================
+        ws["C2"] = "CORREDORA LUZ MARIA CORREA SPA"
+        ws["C3"] = "Corretaje de Propiedades"
+        ws["C4"] = "Área de RRHH"
 
-        # =======================
-        #   HABERES NO IMPONIBLES
-        # =======================
-        ws[f"A{fila}"] = "HABERES NO IMPONIBLES"
-        fila += 1
+        ws["H2"] = "Fecha Emisión:"
+        ws["H3"] = QDate.currentDate().toString("dd-MM-yyyy")
 
-        for cid, spin in self.campos_concepto.items():
-            info = self.info_concepto[cid]
-            if info["grupo"] == "haber_no_imponible":
-                ws[f"A{fila}"] = info["nombre"]
-                ws[f"B{fila}"] = int(spin.value())
-                fila += 1
+        ws.merge_cells("B6:F6")
+        ws["B6"] = f"LIQUIDACION DE REMUNERACIONES: {periodo}"
+        ws["B6"].font = big_bold
+        ws["B6"].alignment = center
+        ws["B6"].border = border_top
 
-        fila += 1
-        ws[f"A{fila}"] = "TOTAL HABERES NO IMPONIBLES"
-        ws[f"B{fila}"] = int(self.lbl_total_hab_no_impon.text())
-        fila += 2
+        ws["A8"] = f"NOMBRE: {trabajador.get('nombre','')}"
+        ws["E8"] = f"FECHA DE INGRESO: {trabajador.get('fecha_ingreso','')}"
+        ws["A9"] = f"RUT: {rut}"
+        ws["E9"] = f"TIPO DE CONTRATO: {trabajador.get('tipo_contrato','')}"
 
-        # =======================
-        #   DESCUENTOS PREVISIONALES
-        # =======================
-        ws[f"A{fila}"] = "DESCUENTOS PREVISIONALES"
-        fila += 1
+        # =========================
+        # TITULOS
+        # =========================
+        ws["A11"] = "HABERES"
+        ws["D11"] = "DESCUENTOS"
+        ws["G11"] = "DATOS ADICIONALES"
 
-        for cid, spin in self.campos_concepto.items():
-            info = self.info_concepto[cid]
-            if info["grupo"] == "descuento_previsional":
-                ws[f"A{fila}"] = info["nombre"]
-                ws[f"B{fila}"] = int(spin.value())
-                fila += 1
+        for c in ["A11", "D11", "G11"]:
+            ws[c].font = bold
+            ws[c].border = border_top
 
-        fila += 1
-        ws[f"A{fila}"] = "TOTAL DESCUENTOS PREVISIONALES"
-        ws[f"B{fila}"] = int(self.lbl_total_desc_prev.text())
-        fila += 2
-
-        # =======================
-        #   OTROS DESCUENTOS
-        # =======================
-        ws[f"A{fila}"] = "OTROS DESCUENTOS"
-        fila += 1
+        # =========================
+        # LISTADO DE CONCEPTOS
+        # =========================
+        fila = 12
+        haberes = []
+        descuentos = []
 
         for cid, spin in self.campos_concepto.items():
             info = self.info_concepto[cid]
-            if info["grupo"] == "descuento_otro":
-                ws[f"A{fila}"] = info["nombre"]
-                ws[f"B{fila}"] = int(spin.value())
-                fila += 1
+            valor = int(spin.value())
 
-        fila += 1
-        ws[f"A{fila}"] = "TOTAL OTROS DESCUENTOS"
-        ws[f"B{fila}"] = int(self.lbl_total_desc_otros.text())
-        fila += 2
+            if info["grupo"] in ("haber_imponible", "haber_no_imponible"):
+                haberes.append((info["nombre"], valor))
+            elif info["grupo"] in ("descuento_previsional", "descuento_otro"):
+                descuentos.append((info["nombre"], valor))
 
-        # =======================
-        #   TOTALES GENERALES
-        # =======================
-        ws[f"A{fila}"] = "TOTAL HABERES"
-        ws[f"B{fila}"] = int(self.lbl_total_haberes.text())
-        fila += 1
+        max_filas = max(len(haberes), len(descuentos))
 
-        ws[f"A{fila}"] = "TOTAL DESCUENTO GENERAL"
-        ws[f"B{fila}"] = int(self.lbl_total_desc_general.text())
-        fila += 1
+        for i in range(max_filas):
+            if i < len(haberes):
+                ws[f"A{fila}"] = haberes[i][0]
+                ws[f"B{fila}"] = haberes[i][1]
+                ws[f"B{fila}"].number_format = moneda
+                ws[f"B{fila}"].alignment = right
 
-        ws[f"A{fila}"] = "LÍQUIDO A PAGAR"
-        ws[f"B{fila}"] = int(self.lbl_liquido_pagar.text().replace("<b>", "").replace("</b>", ""))
-        fila += 3
+            if i < len(descuentos):
+                ws[f"D{fila}"] = descuentos[i][0]
+                ws[f"E{fila}"] = descuentos[i][1]
+                ws[f"E{fila}"].number_format = moneda
+                ws[f"E{fila}"].alignment = right
 
-        # =======================
-        #   DATOS ADICIONALES (lado derecho Excel)
-        # =======================
-        ws[f"A{fila}"] = "DATOS ADICIONALES"
-        fila += 1
+            fila += 1
 
-        ws[f"A{fila}"] = "DÍAS TRABAJADOS"
-        ws[f"B{fila}"] = self.dias_trabajados.value()
-        fila += 1
+        # =========================
+        # TOTALES EN POSICIÓN EXACTA (EXCEL)
+        # =========================
 
-        ws[f"A{fila}"] = "Nº HORAS EXTRAS"
-        ws[f"B{fila}"] = self.num_horas_extras.value()
-        fila += 1
+        # TOTAL HABERES IMPONIBLES → A26
+        ws["A26"] = "TOTAL HABERES IMPONIBLES"
+        ws["A26"].font = bold
+        ws["B26"] = int(self.lbl_total_hab_impon.text())
+        ws["B26"].number_format = moneda
+        ws["B26"].font = bold
+        ws["B26"].alignment = right
 
-        ws[f"A{fila}"] = "BASE IMPONIBLE"
-        ws[f"B{fila}"] = int(self.lbl_base_imponible.text())
-        fila += 1
+        # TOTAL DESCUENTOS PREVISIONALES → D19
+        ws["D19"] = "TOTAL DESCUENTOS PREVISIONALES"
+        ws["D19"].font = bold
+        ws["E19"] = int(self.lbl_total_desc_prev.text())
+        ws["E19"].number_format = moneda
+        ws["E19"].font = bold
+        ws["E19"].alignment = right
 
-        ws[f"A{fila}"] = "BASE TRIBUTABLE"
-        ws[f"B{fila}"] = int(self.lbl_base_tributable.text())
-        fila += 1
+        ws["D34"] = "TOTAL OTROS DESCUENTOS"
+        ws["D34"].font = bold
+        ws["E34"] = int(self.lbl_total_desc_otros.text())
+        ws["E34"].number_format = moneda
+        ws["E34"].font = bold
+        ws["E34"].alignment = right
 
-        ws[f"A{fila}"] = "AFP Trabajador"
-        ws[f"B{fila}"] = self.lbl_afp_trabajador.text()
-        fila += 1
+        # TOTAL HABERES NO IMPONIBLES → A34
+        ws["A34"] = "TOTAL HABERES NO IMPONIBLES"
+        ws["A34"].font = bold
+        ws["B34"] = int(self.lbl_total_hab_no_impon.text())
+        ws["B34"].number_format = moneda
+        ws["B34"].font = bold
+        ws["B34"].alignment = right
 
-        ws[f"A{fila}"] = "Cotización AFP"
-        ws[f"B{fila}"] = self.lbl_afp_tasa.text()
-        fila += 1
+        # =========================
+        # TOTALES FINALES
+        # =========================
+        fila_final = 37
 
-        ws[f"A{fila}"] = "Previsión Trabajador"
-        ws[f"B{fila}"] = self.lbl_prev_trabajador.text()
-        fila += 1
+        ws[f"A{fila_final}"] = "TOTAL HABERES"
+        ws[f"A{fila_final}"].font = bold
+        ws[f"A{fila_final}"].border = border_double
+        ws[f"B{fila_final}"] = int(self.lbl_total_haberes.text())
+        ws[f"B{fila_final}"].number_format = moneda
+        ws[f"B{fila_final}"].font = bold
+        ws[f"B{fila_final}"].alignment = right
 
-        ws[f"A{fila}"] = "% a Cotizar"
-        ws[f"B{fila}"] = self.lbl_prev_tasa.text()
-        fila += 1
+        ws[f"D{fila_final}"] = "TOTAL DESCUENTO GENERAL"
+        ws[f"D{fila_final}"].font = bold
+        ws[f"D{fila_final}"].border = border_double
+        ws[f"E{fila_final}"] = int(self.lbl_total_desc_general.text())
+        ws[f"E{fila_final}"].number_format = moneda
+        ws[f"E{fila_final}"].font = bold
+        ws[f"E{fila_final}"].alignment = right
 
-        ws[f"A{fila}"] = "RUT"
-        ws[f"B{fila}"] = self.lbl_rut.text()
-        fila += 1
+        ws[f"G{fila_final}"] = "LIQUIDO A PAGAR"
+        ws[f"G{fila_final}"].font = big_bold
+        ws[f"H{fila_final}"] = int(
+            self.lbl_liquido_pagar.text().replace("<b>", "").replace("</b>", "")
+        )
+        ws[f"H{fila_final}"].number_format = moneda
+        ws[f"H{fila_final}"].font = big_bold
+        ws[f"H{fila_final}"].alignment = right
 
-        ws[f"A{fila}"] = "Observaciones"
-        ws[f"B{fila}"] = self.observaciones_edit.text()
-        fila += 2
+        # =========================
+        # DATOS ADICIONALES
+        # =========================
+        ws["G12"] = "DIAS TRABAJADOS"
+        ws["H12"] = self.dias_trabajados.value()
 
-        # =======================
-        #   RETROACTIVO
-        # =======================
-        ws[f"A{fila}"] = "RETROACTIVO ASIGNACIÓN FAMILIAR"
-        fila += 1
+        ws["G13"] = "Nº DE HORAS EXTRAS"
+        ws["H13"] = self.num_horas_extras.value()
 
-        ws[f"A{fila}"] = "Antiguo"
-        ws[f"B{fila}"] = int(self.retro_antiguo.value())
-        fila += 1
+        ws["G14"] = "BASE IMPONIBLE"
+        ws["H14"] = int(self.lbl_base_imponible.text())
+        ws["H14"].number_format = moneda
 
-        ws[f"A{fila}"] = "Actual"
-        ws[f"B{fila}"] = int(self.retro_actual.value())
-        fila += 1
+        ws["G15"] = "BASE TRIBUTABLE"
+        ws["H15"] = int(self.lbl_base_tributable.text())
+        ws["H15"].number_format = moneda
 
-        ws[f"A{fila}"] = "Diferencia"
-        ws[f"B{fila}"] = int(self.retro_diferencia.value())
-        fila += 2
+        ws["G16"] = "AFP_TRABAJADOR"
+        ws["H16"] = self.lbl_afp_trabajador.text()
 
-        # ==== Guardar ====
+        ws["G17"] = "COTIZACION AFP"
+        ws["H17"] = self.lbl_afp_tasa.text()
+
+        ws["G18"] = "ISAPRE_TRABAJADOR"
+        ws["H18"] = self.lbl_prev_trabajador.text()
+
+        ws["G19"] = "IsapreACotizar%"
+        ws["H19"] = self.lbl_prev_tasa.text()
+
+        # =========================
+        # PIE
+        # =========================
+        pie = fila_final + 4
+        ws.merge_cells(f"A{pie}:F{pie}")
+        ws[f"A{pie}"] = (
+            "Recibí conforme el alcance líquido de la presente liquidación, "
+            "no teniendo cargo o cobro alguno que hacer por otro concepto."
+        )
+
+        ws[f"A{pie+3}"] = "Firma y Timbre Empleador"
+        ws[f"G{pie+3}"] = trabajador.get("nombre", "")
+        ws[f"G{pie+4}"] = f"RUT: {rut}"
+
         wb.save(ruta)
-
-
 
 
 
@@ -959,6 +1001,18 @@ class DialogoLiquidacion(QDialog):
 
         self.lbl_base_imponible.setText(str(int(total_impon)))
         self.lbl_base_tributable.setText(str(int(total_impon)))
+
+
+
+        self.total_haberes_imponibles = int(total_impon)
+        self.total_haberes_no_imponibles = int(total_no_impon)
+        self.total_haberes = int(total_haberes)
+        self.total_descuentos_previsionales = int(total_desc_prev)
+        self.total_descuentos_otros = int(total_desc_otro)
+        self.total_descuentos = int(total_desc_general)
+        self.liquido_pagar = int(liquido)
+
+        
 
     # ------------------------------------------------
     # Guardar

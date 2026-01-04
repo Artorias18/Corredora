@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QHeaderView, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
-from services.finanzas_service import obtener_arriendos_finanzas
+# from services.finanzas_service import obtener_arriendos_finanzas
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
@@ -47,128 +47,35 @@ class DashboardFinanzas(QWidget):
 
     #### ---------------- FUNCIONES DE EXCEL ---------------- ####
 
-    def generar_excel_finanzas(self, df, ruta):
-        """
-        Genera el Excel con formato bonito.
-        """
-        
+    def exportar_excel(operaciones, ruta):
         wb = Workbook()
         ws = wb.active
-        ws.title = "Arriendos"
+        ws.title = "Honorarios FFMM"
 
-        # Título
-        ws.merge_cells("A1:R1")
-        titulo = ws["A1"]
-        titulo.value = "CONSOLIDADO DE ARRIENDOS"
-        titulo.font = Font(size=16, bold=True)
-        titulo.alignment = Alignment(horizontal="center")
+        ws.append([
+            "Año",
+            "Mes",
+            "Propiedad",
+            "Tipo Honorario",
+            "Base",
+            "%",
+            "Honorarios",
+            "IVA",
+            "Monto FFMM"
+        ])
 
-        # Insertar DataFrame
-        for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 3):
-            for c_idx, value in enumerate(row, 1):
-                ws.cell(row=r_idx, column=c_idx, value=value)
-
-        # Estilo cabeceras
-        header_fill = PatternFill("solid", fgColor="D9D9D9")
-        for cell in ws[3]:
-            cell.font = Font(bold=True)
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal="center")
-            cell.border = Border(
-                left=Side(style="thin"),
-                right=Side(style="thin"),
-                top=Side(style="thin"),
-                bottom=Side(style="thin")
-            )
-
-        # Ajuste seguro de anchos (sin errores por merged cells)
-        for col_idx, column_cells in enumerate(ws.columns, 1):
-            max_length = 0
-            for cell in column_cells:
-                if cell.value:
-                    try:
-                        max_length = max(max_length, len(str(cell.value)))
-                    except:
-                        pass
-            col_letter = get_column_letter(col_idx)
-            ws.column_dimensions[col_letter].width = max_length + 3
+        for op in operaciones:
+            ws.append([
+                op["anio"],
+                op["mes"],
+                op["codigo"],
+                op["tipo"],
+                float(op["base"]),
+                float(op["porcentaje"]) if op["porcentaje"] else "",
+                float(op["honorarios"]),
+                float(op["iva"]),
+                float(op["monto_ffmm"])
+            ])
 
         wb.save(ruta)
-
-
-    #### ---------------- EXPORTADOR ---------------- ####
-
-    def exportar_excel(self):
-        """
-        Exporta Excel directamente desde Supabase, 
-        incluyendo toda la información de arriendos.
-        """
-
-        datos = obtener_arriendos_finanzas()
-
-        if not datos:
-            QMessageBox.warning(self, "Sin datos", "No se encontraron arriendos para exportar.")
-            return
-
-        columnas = [
-            "ROL", "COMUNA", "DIRECCION", "NRO DEPARTAMENTO",
-            "NOMBRE ARRENDATARIO", "RUT ARRENDATARIO",
-            "MONTO RENTA", "ESTADO",
-            "FECHA INICIO", "FECHA TERMINO",
-            "NOMBRE PROPIETARIO", "RUT PROPIETARIO",
-            "CORREO ARRENDATARIO", "TELEFONO",
-            "TIPO PAGO", "GASTO COMUN", "GARANTIA"
-        ]
-
-        df = pd.DataFrame(datos)
-
-        # 🔹 Convertir booleano a texto legible
-        if "gastos_comunes_incluidos" in df.columns:
-            df["gastos_comunes"] = df["gastos_comunes_incluidos"].apply(
-                lambda x: "Incluido" if x else "No incluido"
-            )
-        else:
-            df["gastos_comunes"] = ""
-
-        # Renombrar columnas
-        df_final = df.rename(columns={
-            "rol": "ROL",
-            "comuna": "COMUNA",
-            "direccion": "DIRECCION",
-            "nombre_arrendatario": "NOMBRE ARRENDATARIO",
-            "rut_arrendatario": "RUT ARRENDATARIO",
-            "renta_mensual": "MONTO RENTA",
-            "estado": "ESTADO",
-            "fecha_inicio": "FECHA INICIO",
-            "fecha_termino": "FECHA TERMINO",
-            "nombre_propietario": "NOMBRE PROPIETARIO",
-            "rut_propietario": "RUT PROPIETARIO",
-            "correo_arrendatario": "CORREO ARRENDATARIO",
-            "telefono_arrendatario": "TELEFONO",
-            "forma_pago": "TIPO PAGO",
-            "gastos_comunes": "GASTO COMUN",
-            "garantia": "GARANTIA"
-        })
-
-        df_final = df_final.reindex(columns=columnas)
-
-        ruta, _ = QFileDialog.getSaveFileName(
-            self,
-            "Guardar Excel",
-            "conglomerado_arriendos",
-            "Archivos Excel (*.xlsx)"
-        )
-
-        if not ruta:
-            return
-
-        if not ruta.endswith(".xlsx"):
-            ruta += ".xlsx"
-
-        try:
-            self.generar_excel_finanzas(df_final, ruta)
-            QMessageBox.information(self, "Éxito", f"Excel generado correctamente:\n{ruta}")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al generar Excel:\n{e}")
 

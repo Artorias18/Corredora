@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QHeaderView,QGroupBox ,QDialogButtonBox,QSizePolicy, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.arriendos_service import obtener_arriendos_resumen, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
+from services.arriendos_service import obtener_arriendos_resumen,guardar_abonos_arriendo, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator
 from gui.usuario_actual import UsuarioActual
@@ -9,6 +9,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 from services.supabase_client import supabase
 import json
+import calendar
+from calendar import monthrange
 import pandas as pd
 
 
@@ -294,11 +296,12 @@ class DetalleArriendoWindow(QWidget):
 
 
 class DashboardArriendos(QWidget):
-    def __init__(self, parent = None):
+    def __init__(self,arriendo_id=None, parent = None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         self.cargando_tabla = False
-
+        self.arriendo_id = arriendo_id
+        self.detalle_arriendo = {}
         filter_layout = QHBoxLayout()
         
         # Filtro de búsqueda
@@ -338,6 +341,13 @@ class DashboardArriendos(QWidget):
 
         layout.addLayout(filter_layout)
 
+        btn_abonos = QPushButton("Agregar abonos")
+        btn_abonos.setEnabled(False)
+        btn_abonos.clicked.connect(self.abrir_abonos_arriendo)
+
+        layout.addWidget(btn_abonos)
+        self.btn_abonos = btn_abonos
+
 
          # Tabla de arriendos
         self.tabla_arriendos = QTableWidget()
@@ -356,6 +366,7 @@ class DashboardArriendos(QWidget):
         self.tabla_arriendos.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.tabla_arriendos.verticalHeader().setVisible(False)
         self.tabla_arriendos.itemDoubleClicked.connect(self.mostrar_detalle_arriendo)
+        self.tabla_arriendos.itemSelectionChanged.connect(self.habilitar_boton_abonos)
         
         layout.addWidget(self.tabla_arriendos)
 
@@ -371,15 +382,29 @@ class DashboardArriendos(QWidget):
         self.btn_exportar = QPushButton("Exportar a Excel")
         self.btn_exportar.clicked.connect(self.exportar_excel)
         
+        self.btn_agregar_factor_actualizacion = QPushButton("Agregar Factor Actualización")
+        self.btn_agregar_factor_actualizacion.clicked.connect(self.abrir_factor_actualizacion)
+       
+
  
         
-       
         button_layout.addWidget(self.btn_agregar_arriendo)
         button_layout.addWidget(self.btn_actualizar)
+        button_layout.addWidget(self.btn_agregar_factor_actualizacion)
         button_layout.addWidget(self.btn_exportar)
+        
         
         layout.addLayout(button_layout)
         
+        if self.arriendo_id:
+            self.detalle_arriendo = obtener_detalle_arriendo(self.arriendo_id)
+            if not self.detalle_arriendo:
+                layout.addWidget(QLabel("No se encontraron detalles para este arriendo"))
+            else:
+                self.cargar_datos_arriendo(self.arriendo_id)
+
+
+
         # Cargar datos iniciales
         self.cargar_arriendos()
 
@@ -424,7 +449,6 @@ class DashboardArriendos(QWidget):
         finally:
             self.cargando_tabla = False
 
-    
 
 
     def filtrar_arriendos(self):
@@ -435,9 +459,33 @@ class DashboardArriendos(QWidget):
         self.ventana_detalle = DetalleArriendoWindow(arriendo_id)
         self.ventana_detalle.show()
 
+    def habilitar_boton_abonos(self):
+        self.btn_abonos.setEnabled(
+            len(self.tabla_arriendos.selectedItems()) > 0
+        )
+
+    def obtener_arriendo_seleccionado(self):
+        fila = self.tabla_arriendos.currentRow()
+        if fila < 0:
+            return None
+
+        arriendo_id = int(self.tabla_arriendos.item(fila, 0).text())
+        return arriendo_id
+
+    def abrir_abonos_arriendo(self):
+        arriendo_id = self.obtener_arriendo_seleccionado()
+        if not arriendo_id:
+            QMessageBox.warning(self, "Error", "Debe seleccionar un arriendo")
+            return
+
+        dialog = DialogAbonosArriendo(arriendo_id, self)
+        dialog.exec()
+
+
     def generar_excel_finanzas(self, datos, ruta, factor_actualizacion=None):
         wb = Workbook()
         wb.remove(wb.active)
+        peso = '$#,##0'
 
         df = pd.DataFrame(datos)
 
@@ -469,7 +517,12 @@ class DashboardArriendos(QWidget):
             "correo_arrendatario": "CORREO ARRENDATARIO",
             "telefono_arrendatario": "TELEFONO",
             "forma_pago": "TIPO PAGO",
-            "garantia": "GARANTIA"
+            "garantia": "GARANTIA",
+            "amoblado":"AMOBLADO",
+            "destino":"DESTINO",
+            'dfl2':"DFL12",
+            "naturaleza_bien_raiz":"NATURALEZA BIEN RAIZ"
+
         }, inplace=True)
 
         df["FECHA INICIO"] = pd.to_datetime(df["FECHA INICIO"])
@@ -509,40 +562,6 @@ class DashboardArriendos(QWidget):
             t.alignment = center
 
             row_cursor = 3
-
-            if factor_actualizacion:
-                ws.merge_cells("A3:D3")
-                ws["A3"] = "TOTAL ARRIENDO CON FACTOR ACTUALIZACIÓN"
-                ws["A3"].font = Font(bold=True)
-
-                ws.append([
-                    "Mes",
-                    "Factor de actualización",
-                    "Monto del arriendo",
-                    "Total"
-                ])
-
-                for fila in ws[4]:
-                    fila.font = bold
-                    fila.alignment = center
-                    fila.border = border
-
-                total_monto = 0
-                total_actualizado = 0
-
-                for f in factor_actualizacion:
-                    ws.append([
-                        f["mes"],
-                        f["factor"],
-                        f["monto"],
-                        f["total"]
-                    ])
-                    total_monto += f["monto"]
-                    total_actualizado += f["total"]
-
-                ws.append([
-                    "Total anual", "", total_monto, total_actualizado
-                ])
 
 
             # ===============================
@@ -627,6 +646,83 @@ class DashboardArriendos(QWidget):
 
             row_cursor += len(df_cont) + 2
 
+
+        if factor_actualizacion:
+            ws.merge_cells(start_row=row_cursor, start_column=1,
+                        end_row=row_cursor, end_column=5)
+            ws.cell(
+                row=row_cursor,
+                column=1,
+                value="DETALLE ARRIENDOS CON FACTOR DE ACTUALIZACIÓN"
+            ).font = Font(bold=True)
+
+            row_cursor += 1
+
+            headers = [
+                "Mes",
+                "Propiedad",
+                "Renta mensual",
+                "Factor",
+                "Renta actualizada"
+            ]
+
+            for col, h in enumerate(headers, 1):
+                c = ws.cell(row=row_cursor, column=col, value=h)
+                c.font = bold
+                c.fill = header_fill
+                c.alignment = center
+                c.border = border
+
+            row_cursor += 1
+
+            total_general_actualizado = 0
+
+            # 🔹 POR CADA MES
+            for f in factor_actualizacion:
+                mes = f["mes"]        # "Enero"
+                factor = f["factor"]  # float
+
+                # 🔹 POR CADA ARRIENDO
+                for _, r in df.iterrows():
+                    renta = r["MONTO RENTA"]
+                    propiedad = r.get("DIRECCION", "")
+
+                    total_actualizado = renta * factor
+
+                    total_general_actualizado += total_actualizado
+
+                    ws.cell(row=row_cursor, column=1, value=mes)
+                    ws.cell(row=row_cursor, column=2, value=propiedad)
+                    ws.cell(row=row_cursor, column=3, value=int(renta))
+                    ws.cell(row=row_cursor, column=4, value=factor)
+                    ws.cell(row=row_cursor, column=5, value=int(total_actualizado))
+
+                    ws.cell(row=row_cursor, column=3).number_format = peso   # Renta mensual
+                    ws.cell(row=row_cursor, column=5).number_format = peso 
+
+                    for col in range(1, 6):
+                        ws.cell(row=row_cursor, column=col).border = border
+
+                    row_cursor += 1
+
+
+            ws.merge_cells(start_row=row_cursor, start_column=1,
+                   end_row=row_cursor, end_column=4)
+            
+            c = ws.cell(row=row_cursor, column=1, value="TOTAL RENTAS ACTUALIZADAS")
+            c.font = Font(bold=True)
+            c.alignment = center
+            c.border = border
+
+            total_cell = ws.cell(
+                row=row_cursor,
+                column=5,
+                value=int(total_general_actualizado)
+            )
+            total_cell.number_format = peso
+            row_cursor += 2
+
+
         # ============================================
         #   AJUSTAR ANCHOS
         # ============================================
@@ -666,6 +762,7 @@ class DashboardArriendos(QWidget):
             self.generar_excel_finanzas(
             datos,
             ruta,
+            factor_actualizacion=getattr(self, "factores_actualizacion", None)
             )
             QMessageBox.information(self, "Éxito", f"Excel generado correctamente:\n{ruta}")
         except Exception as e:
@@ -677,6 +774,15 @@ class DashboardArriendos(QWidget):
         self.formulario_arriendo = FormularioArriendo()
         self.formulario_arriendo.arriendo_guardado.connect(self.cargar_arriendos)
         self.formulario_arriendo.show()
+
+    def abrir_factor_actualizacion(self):
+        dialog = DialogFactorActualizacion(self)
+        if dialog.exec():
+            self.factores_actualizacion = dialog.resultado
+
+                
+            
+
 
         
     
@@ -894,11 +1000,6 @@ class FormularioArriendo(QWidget):
         self.btn_calcular_impuesto.clicked.connect(self.abrir_dialogo_impuesto)
         layout.addRow(self.btn_calcular_impuesto)
 
-        self.btn_agregar_factor_actualizacion = QPushButton("Agregar Factor Actualización")
-        self.btn_agregar_factor_actualizacion.clicked.connect(self.abrir_factor_actualizacion)
-        layout.addRow(self.btn_agregar_factor_actualizacion)
-
-
         self.tbl_evaluacion = QTableWidget()
         self.tbl_evaluacion.setRowCount(9)
         self.tbl_evaluacion.setColumnCount(5)
@@ -1102,15 +1203,7 @@ class FormularioArriendo(QWidget):
             self.txt_impuesto_renta.setText(str(dialog.resultado))
 
 
-    def abrir_factor_actualizacion(self):
-        renta = self.detalle_arriendo["renta_mensual"]
-
-        dialog = DialogFactorActualizacion(renta, self)
-        if dialog.exec():
-            self.factores_actualizacion = dialog.resultado
-                
-            
-
+   
         
 
     def setup_tab_arriendo(self,tab):
@@ -1801,22 +1894,19 @@ class ImpuestoRentaDialog(QDialog):
 
 
 class DialogFactorActualizacion(QDialog):
-    def __init__(self, renta_mensual, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Factor de actualización de arriendos")
-        self.resize(650, 420)
+        self.resize(500, 400)
 
-        self.renta_mensual = renta_mensual
         self.resultado = []
 
         layout = QVBoxLayout(self)
 
-        self.tabla = QTableWidget(12, 4)
+        self.tabla = QTableWidget(12, 2)
         self.tabla.setHorizontalHeaderLabels([
             "Mes",
-            "Factor de actualización",
-            "Monto del arriendo",
-            "Total"
+            "Factor de actualización"
         ])
 
         meses = [
@@ -1825,49 +1915,24 @@ class DialogFactorActualizacion(QDialog):
         ]
 
         for row, mes in enumerate(meses):
-            # Mes
             item_mes = QTableWidgetItem(mes)
             item_mes.setFlags(Qt.ItemIsEnabled)
             self.tabla.setItem(row, 0, item_mes)
 
-            # Factor
             factor = QDoubleSpinBox()
             factor.setDecimals(3)
             factor.setRange(0.5, 5)
             factor.setSingleStep(0.001)
             factor.setValue(1.0)
-            factor.valueChanged.connect(
-                lambda _, r=row: self.calcular_total(r)
-            )
             self.tabla.setCellWidget(row, 1, factor)
-
-            # Monto (desde BD)
-            item_monto = QTableWidgetItem(f"{self.renta_mensual:,}")
-            item_monto.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            item_monto.setFlags(Qt.ItemIsEnabled)
-            self.tabla.setItem(row, 2, item_monto)
-
-            # Total
-            item_total = QTableWidgetItem("")
-            item_total.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            item_total.setFlags(Qt.ItemIsEnabled)
-            self.tabla.setItem(row, 3, item_total)
 
         self.tabla.resizeColumnsToContents()
         layout.addWidget(self.tabla)
 
-        botones = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botones.accepted.connect(self.guardar)
         botones.rejected.connect(self.reject)
         layout.addWidget(botones)
-
-
-    def calcular_total(self, row):
-        factor = self.tabla.cellWidget(row, 1).value()
-        total = int(self.renta_mensual * factor)
-        self.tabla.item(row, 3).setText(f"{total:,}")
 
     def guardar(self):
         self.resultado.clear()
@@ -1875,14 +1940,85 @@ class DialogFactorActualizacion(QDialog):
         for row in range(12):
             mes = self.tabla.item(row, 0).text()
             factor = self.tabla.cellWidget(row, 1).value()
-            monto = self.renta_mensual
-            total = int(monto * factor)
 
             self.resultado.append({
                 "mes": mes,
-                "factor": factor,
-                "monto": monto,
-                "total": total
+                "factor": factor
             })
 
         self.accept()
+
+
+
+class DialogAbonosArriendo(QDialog):
+    def __init__(self, arriendo_id, parent=None):
+        super().__init__(parent)
+        self.arriendo_id = arriendo_id
+        self.setWindowTitle("Abonos del arriendo")
+
+        layout = QVBoxLayout(self)
+
+        self.tabla = QTableWidget(0, 3)
+        self.tabla.setHorizontalHeaderLabels([
+            "Fecha",
+            "Monto",
+            "Descripción"
+        ])
+        self.tabla.horizontalHeader().setStretchLastSection(True)
+
+        layout.addWidget(self.tabla)
+
+        btn_agregar = QPushButton("Agregar abono")
+        btn_eliminar = QPushButton("Eliminar abono")
+        btn_guardar = QPushButton("Guardar abonos")
+
+        btn_agregar.clicked.connect(self.agregar_fila)
+        btn_eliminar.clicked.connect(self.eliminar_fila)
+        btn_guardar.clicked.connect(self.guardar_abonos)
+
+        botones = QHBoxLayout()
+        botones.addWidget(btn_agregar)
+        botones.addWidget(btn_eliminar)
+        botones.addStretch()
+        botones.addWidget(btn_guardar)
+
+        layout.addLayout(botones)
+
+    def agregar_fila(self):
+        fila = self.tabla.rowCount()
+        self.tabla.insertRow(fila)
+
+        self.tabla.setItem(fila, 0, QTableWidgetItem(QDate.currentDate().toString("yyyy-MM-dd")))
+        self.tabla.setItem(fila, 1, QTableWidgetItem(""))
+        self.tabla.setItem(fila, 2, QTableWidgetItem(""))
+
+
+    def eliminar_fila(self):
+        fila = self.tabla.currentRow()
+        if fila >= 0:
+            self.tabla.removeRow(fila)
+
+
+    def guardar_abonos(self):
+        abonos = []
+
+        for row in range(self.tabla.rowCount()):
+            fecha = self.tabla.item(row, 0).text()
+            monto = self.tabla.item(row, 1).text()
+            descripcion = self.tabla.item(row, 2).text()
+
+            if not monto:
+                continue
+
+            abonos.append({
+                "fecha": fecha,
+                "monto": float(monto),
+                "descripcion": descripcion
+            })
+
+        try:
+            guardar_abonos_arriendo(self.arriendo_id, abonos)
+            QMessageBox.information(self, "OK", "Abonos guardados correctamente")
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))

@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QMessageBox
 import logging
 from typing import Optional, Dict, Any
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import date
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -205,3 +206,32 @@ def obtener_arriendos_finanzas():
     except Exception as e:
         logger.error(f"Error al obtener arriendos finanzas: {e}")
         return []
+
+
+
+
+
+
+def guardar_abonos_arriendo(arriendo_id: int, abonos: list[dict]):
+    if not arriendo_id:
+        raise ValueError("arriendo_id inválido")
+
+    registros = []
+
+    for a in abonos:
+        monto = float(a.get("monto", 0))
+
+        if monto <= 0:
+            continue
+
+        registros.append({
+            "arriendo_id": arriendo_id,
+            "fecha": a.get("fecha", date.today().isoformat()),
+            "monto": monto,
+            "descripcion": a.get("descripcion", "")
+        })
+
+    if not registros:
+        raise ValueError("No hay abonos válidos para guardar")
+
+    supabase.table("abonos_arriendo").insert(registros).execute()
