@@ -10,4 +10,5 @@ Scripts/
 services/supabase_client.py
 __pycache__/
 
-test_rrhh.py
+secret.key
+session.dat

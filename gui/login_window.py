@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel
 from PySide6.QtGui import QGuiApplication
-from gui.main_window import MainWindow
 from services.supabase_client import supabase
 from gui.usuario_actual import UsuarioActual
+from utils.session_storage import SessionStorage
+
 
 class LoginWindow(QWidget):
 
@@ -10,11 +11,7 @@ class LoginWindow(QWidget):
         super().__init__()
 
         self.setWindowTitle("Login")
-        
-        # Tamaño fijo
         self.setFixedSize(400, 300)
-
-        # Centrar la ventana
         self.center_window()
 
         layout = QVBoxLayout()
@@ -42,46 +39,57 @@ class LoginWindow(QWidget):
         password = self.password_input.text()
 
         try:
-            user = supabase.auth.sign_in_with_password({
-                'email':email,
-                'password':password
+            session = supabase.auth.sign_in_with_password({
+                'email': email,
+                'password': password
             })
 
-            if user:
-                user_id = user.user.id
-                self.message_label.setText("Usuario autenticado correctamente")
-                self.get_user_role(user_id)
-            else:
-                self.message_label.setText("Error de autenticacion")
+            if session:
+                # Obtener user_id
+                user_id = session.user.id
 
-            
+                # Obtener rol desde DB
+                rol = self.get_user_role(user_id)
+
+                # Guardar sesión encriptada
+                SessionStorage.save_session({
+                    "user_id": user_id,
+                    "access_token": session.session.access_token,
+                    "refresh_token": session.session.refresh_token,
+                    "expires_in": session.session.expires_in,
+                    "rol": rol
+                })
+
+                self.message_label.setText("Usuario autenticado correctamente")
+                self.redirect_to_main(user_id, rol)
+
+            else:
+                self.message_label.setText("Error de autenticación")
+
         except Exception as e:
             self.message_label.setText(f"Error: {str(e)}")
 
-    def get_user_role(self,user_id):
-
-        response = supabase.table('usuarios').select('rol').eq('id',user_id).execute()
+    def get_user_role(self, user_id):
+        response = supabase.table('usuarios').select('rol').eq('id', user_id).execute()
 
         if response.data:
             rol = response.data[0]['rol']
             UsuarioActual.id = user_id
             UsuarioActual.rol = rol
-            self.message_label.setText(f"Rol: {rol}")
-            self.redirect_to_dashboard(rol)
+            return rol
         else:
             self.message_label.setText("Usuario no encontrado en la base de datos")
-
-
-            
-    def redirect_to_dashboard(self, rol):
+            return "usuario"
+        
+    def redirect_to_main(self, user_id, rol):
+        from gui.menu import MenuWindow
         try:
-          self.main_window = MainWindow(rol)
-          self.main_window.show()
-          self.close()
+            self.main = MenuWindow(user_id, rol)
+            self.main.show()
+            self.close()
         except Exception as e:
-            print("Error al abrir el dashboard:", e)
             self.message_label.setText("Error al abrir el dashboard.")
-
+            
     def center_window(self):
         screen = QGuiApplication.primaryScreen().availableGeometry()
         x = (screen.width() - self.width()) // 2

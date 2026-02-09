@@ -259,13 +259,13 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
         if not data_venta.get('propiedad',{}).get('codigo'):
             raise ValueError("El código de la propiedad es obligatorio")
         
-        if es_venta_cerrada:
-            if not data_venta.get('comprador', {}).get('rut'):
-                raise ValueError("El RUT del comprador es obligatorio para ventas cerradas")
-            if not data_venta.get('vendedor', {}).get('rut'):
-                raise ValueError("El RUT del vendedor es obligatorio para ventas cerradas")
-            if not data_venta.get('venta', {}).get('tipo_venta'):
-                raise ValueError("El tipo de venta es obligatorio para ventas cerradas")
+        # if es_venta_cerrada:
+        #     if not data_venta.get('comprador', {}).get('rut'):
+        #         raise ValueError("El RUT del comprador es obligatorio para ventas cerradas")
+        #     if not data_venta.get('vendedor', {}).get('rut'):
+        #         raise ValueError("El RUT del vendedor es obligatorio para ventas cerradas")
+        #     if not data_venta.get('venta', {}).get('tipo_venta'):
+        #         raise ValueError("El tipo de venta es obligatorio para ventas cerradas")
 
         # Determinar estado de venta
         estado_venta = data_venta['venta'].get('estado_venta', 'en_proceso' if not es_venta_cerrada else 'negociandose')
@@ -499,7 +499,13 @@ def guardar_venta(data_venta, data_posesion=None, herederos=None, mejoras=None, 
             'gravamen': data_venta['venta'].get('gravamen', 'No Posee Documento'),
             'certificado_numero': data_venta['venta'].get('certificado_numero', 'No Posee Documento'),
             'aseo': data_venta['venta'].get('aseo', 'No Posee Documento'),
-            'no_expropiacion': data_venta['venta'].get('no_expropiacion', 'No Posee Documento')
+            'no_expropiacion': data_venta['venta'].get('no_expropiacion', 'No Posee Documento'),
+            'comprador_pago':data_venta['venta'].get('comprador_pago', 'No'),
+            'vendedor_pago':data_venta['venta'].get('vendedor_pago', 'No'),
+            'comprador_cuando_paga':data_venta['venta'].get('comprador_cuando_paga', 'Promesa'),
+            'vendedor_cuando_paga':data_venta['venta'].get('vendedor_cuando_paga', 'Promesa'),
+            'tipo_documento': data_venta['venta'].get('tipo_documento', 'Boleta')
+
         }
 
         if es_venta_cerrada and tipo_venta in ["Subsidio", "Credito H. + Subsidio"]:

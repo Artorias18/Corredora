@@ -4,11 +4,17 @@ import re
 
 # ---- Librerías externas ----
 from openpyxl import Workbook
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+from openpyxl.utils import column_index_from_string
 from openpyxl.styles import Font, Border, Side, Alignment
+from openpyxl.drawing.image import Image
 from PySide6.QtWidgets import QFileDialog
-
+from .rrhh_calculo import MotorCalculoLiquidacion, InputLiquidacion, ResultadoLiquidacion, MotorPersistenciaLiquidacion
+from datetime import date
+from services.get_user_role import get_user_role
+from gui.usuario_actual import UsuarioActual
 # ---- PySide6 ----
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, Signal
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -31,24 +37,26 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
     QWidget,
+    QHeaderView
 )
 
 # ---- Proyecto ----
 from services import rrhh_service
-
-
+from services.supabase_client import supabase
 
 # ====================================================
 #  DASHBOARD PRINCIPAL RRHH
 # ====================================================
 
 class DashboardRRHH(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self,user_id, parent=None):
         super().__init__(parent)
+        self.user_id = user_id
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         self.tabs.addTab(TabTrabajadores(), " Trabajadores")
         self.tabs.addTab(TabLiquidaciones(), " Liquidaciones")
+        self.tabs.addTab(Tabdocs(self.user_id), "Gestor documentos")
         layout.addWidget(self.tabs)
         self.setLayout(layout)
 
@@ -56,6 +64,16 @@ class DashboardRRHH(QWidget):
 # ====================================================
 # DIALOGO PARA AGREGAR / EDITAR TRABAJADOR
 # ====================================================
+
+class DoubleClickButton(QPushButton):
+    doubleClicked = Signal()
+
+    def mouseDoubleClickEvent(self, event):
+        self.doubleClicked.emit()
+
+
+        
+    
 
 class DialogoTrabajador(QDialog):
     def __init__(self, trabajador=None, parent=None):
@@ -251,24 +269,33 @@ class TabTrabajadores(QWidget):
         # 3. BOTONES (ABAJO)
         # -----------------------------
         boton_layout = QHBoxLayout()
-        self.btn_agregar = QPushButton("Agregar")
-        self.btn_editar = QPushButton("Editar")
-        self.btn_eliminar = QPushButton("Eliminar")
+        self.btn_agregar = DoubleClickButton("Agregar")
+        self.btn_editar = DoubleClickButton("Editar")
+        self.btn_eliminar = DoubleClickButton("Eliminar")
+        self.btn_actualizar_tasa_afp = DoubleClickButton("Actualizar tasa afp")
 
         boton_layout.addWidget(self.btn_agregar)
         boton_layout.addWidget(self.btn_editar)
         boton_layout.addWidget(self.btn_eliminar)
+        boton_layout.addWidget(self.btn_actualizar_tasa_afp)
 
         layout.addLayout(boton_layout)
 
         # Conexiones
-        self.btn_agregar.clicked.connect(self.agregar_trabajador)
-        self.btn_editar.clicked.connect(self.editar_trabajador)
-        self.btn_eliminar.clicked.connect(self.eliminar_trabajador)
+        self.btn_agregar.doubleClicked.connect(self.agregar_trabajador)
+        self.btn_editar.doubleClicked.connect(self.editar_trabajador)
+        self.btn_eliminar.doubleClicked.connect(self.eliminar_trabajador)
+        self.btn_actualizar_tasa_afp.doubleClicked.connect(self.abrir_dialogo)
+
 
         # Cargar datos
         self.todo_trabajadores = []
         self.cargar_trabajadores()
+
+
+    def abrir_dialogo(self):
+        dialogo = DialogActualizarTasaAFP(parent=self)
+        dialogo.exec()
 
     # ----------------------------------------
     # CARGAR TRABAJADORES BASE
@@ -376,12 +403,94 @@ class TabTrabajadores(QWidget):
             self.cargar_trabajadores()
 
 
+
+class Tabdocs(QWidget):
+    def __init__(self,user_id, parent=None):
+        super().__init__(parent)
+        self.user_id = user_id
+        self.rol = get_user_role(user_id)
+        main_layout = QVBoxLayout(self)
+        main_layout.setAlignment(Qt.AlignTop)
+
+        # ─── Card / Recuadro ─────────────────────────────
+        card = QGroupBox("Gestión de documentos")
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(12)
+
+        descripcion = QLabel(
+            "Accede al repositorio de documentos del sistema.\n"
+            "Aquí podrás subir, descargar y administrar archivos."
+        )
+        descripcion.setWordWrap(True)
+
+        self.btn_documentos = DoubleClickButton("📁 Abrir documentos")
+        self.btn_documentos.setMinimumHeight(40)
+        self.btn_documentos.setCursor(Qt.PointingHandCursor)
+
+        card_layout.addWidget(descripcion)
+        card_layout.addWidget(self.btn_documentos)
+
+        main_layout.addWidget(card)
+
+        self.btn_documentos.doubleClicked.connect(self.open_documentos)
+
+    def open_documentos(self):
+        from gui.docs_window import DocumentosWindow
+
+        if not hasattr(self, "doc_window"):
+            self.doc_window = DocumentosWindow(self.rol)
+
+        self.doc_window.show()
+        self.doc_window.raise_()
+        self.doc_window.activateWindow()
+
+
 # ====================================================
 #  DIALOGO DE LIQUIDACIÓN (todos los campos del Excel)
 # ====================================================
 
 class DialogoLiquidacion(QDialog):
 
+    def insertar_logo(self, ws, ruta_logo):
+        # 1️⃣ Ajustar columnas A y B
+        ws.column_dimensions["A"].width = 18
+        ws.column_dimensions["B"].width = 18
+
+        # 2️⃣ Ajustar filas 1 a 5
+        for fila in range(1, 6):
+            ws.row_dimensions[fila].height = 22
+
+        # 3️⃣ Cargar imagen
+        img = Image(ruta_logo)
+
+        # 4️⃣ Ajustar tamaño aproximado (pixeles)
+        # Conversión aproximada:
+        # ancho columna ≈ width * 7 px
+        # alto fila ≈ height * 1.33 px
+        ancho_px = int((18 + 18) * 7)   # A + B
+        alto_px = int((22 * 5) * 1.33)  # filas 1 a 5
+
+        img.width = ancho_px
+        img.height = alto_px
+
+        # 5️⃣ Insertar en A1
+        ws.add_image(img, "A1")
+
+
+
+    def insertar_firma_empleador(self, ws, ruta_imagen, fila_base):
+        img = Image(ruta_imagen)
+
+        # Tamaño razonable de firma/timbre
+        img.width = 280
+        img.height = 250
+
+        # 👇 Anclar cerca de la firma del empleador
+        # Columna E = un poco a la derecha
+        # fila_base - 1 = subirla un poco
+        celda_ancla = f"B{fila_base - 8}"
+
+        ws.add_image(img, celda_ancla)
 
 
     def exportar_excel(self):
@@ -392,6 +501,7 @@ class DialogoLiquidacion(QDialog):
 
         periodo = self.periodo_edit.text()
         rut = trabajador.get("rut", "")
+
 
         ruta, _ = QFileDialog.getSaveFileName(
             self,
@@ -405,6 +515,8 @@ class DialogoLiquidacion(QDialog):
         wb = Workbook()
         ws = wb.active
         ws.title = "Liquidación"
+
+        self.insertar_logo(ws, "assets/logocorredoraoriginal.png")
 
         # =========================
         # ESTILOS
@@ -481,6 +593,13 @@ class DialogoLiquidacion(QDialog):
                 descuentos.append((info["nombre"], valor))
 
         max_filas = max(len(haberes), len(descuentos))
+
+        gratificacion = int(self.lbl_gratificacion.text())
+
+        for idx, (nombre, valor) in enumerate(haberes):
+            if nombre.upper().find("SUELDO") != -1:
+                haberes.insert(idx + 1, ("GRATIFICACION", gratificacion))
+                break
 
         for i in range(max_filas):
             if i < len(haberes):
@@ -580,30 +699,91 @@ class DialogoLiquidacion(QDialog):
         ws["H15"].number_format = moneda
 
         ws["G16"] = "AFP_TRABAJADOR"
-        ws["H16"] = self.lbl_afp_trabajador.text()
+        ws["H16"] = self.ultimo_input.afp_nombre
 
         ws["G17"] = "COTIZACION AFP"
-        ws["H17"] = self.lbl_afp_tasa.text()
+        ws["H17"] = self.ultimo_input.afp_tasa_txt
 
         ws["G18"] = "ISAPRE_TRABAJADOR"
-        ws["H18"] = self.lbl_prev_trabajador.text()
+        ws["H18"] = self.salud_nombre
 
         ws["G19"] = "IsapreACotizar%"
-        ws["H19"] = self.lbl_prev_tasa.text()
-
+        ws["H19"] = f"{self.porcentaje_salud}%"
         # =========================
         # PIE
         # =========================
+
         pie = fila_final + 4
-        ws.merge_cells(f"A{pie}:F{pie}")
-        ws[f"A{pie}"] = (
+
+        # ------------------------------------------------
+        # TEXTO LEGAL
+        # ------------------------------------------------
+        ws.merge_cells(f"A{pie}:F{pie+2}")
+        cell = ws[f"A{pie}"]
+        cell.value = (
             "Recibí conforme el alcance líquido de la presente liquidación, "
             "no teniendo cargo o cobro alguno que hacer por otro concepto."
         )
+        cell.alignment = Alignment(
+            wrap_text=True,
+            horizontal="center",
+            vertical="center"
+        )
 
-        ws[f"A{pie+3}"] = "Firma y Timbre Empleador"
-        ws[f"G{pie+3}"] = trabajador.get("nombre", "")
-        ws[f"G{pie+4}"] = f"RUT: {rut}"
+        for f in range(pie, pie + 3):
+            ws.row_dimensions[f].height = 25
+
+
+        linea_fila = pie + 7
+
+        # Línea empleador (pegada a la izquierda)
+        ws.merge_cells(f"A{linea_fila}:F{linea_fila}")
+        ws[f"A{linea_fila}"] = "______________________________"
+        ws[f"A{linea_fila}"].alignment = Alignment(
+            horizontal="left",
+            indent=1
+        )
+
+        # Línea trabajador (pegada a la izquierda)
+        ws.merge_cells(f"G{linea_fila}:J{linea_fila}")
+        ws[f"G{linea_fila}"] = "______________________________"
+        ws[f"G{linea_fila}"].alignment = Alignment(
+            horizontal="left",
+            indent=1
+        )
+
+        # ------------------------------------------------
+        # TEXTOS BAJO LAS LINEAS
+        # ------------------------------------------------
+        ws.merge_cells(f"A{linea_fila+1}:F{linea_fila+1}")
+        ws[f"A{linea_fila+1}"] = "Firma y Timbre Empleador"
+        ws[f"A{linea_fila+1}"].alignment = Alignment(
+            horizontal="left",
+            indent=1
+        )
+
+        ws.merge_cells(f"G{linea_fila+1}:J{linea_fila+1}")
+        ws[f"G{linea_fila+1}"] = trabajador.get("nombre", "")
+        ws[f"G{linea_fila+1}"].alignment = Alignment(
+            horizontal="left",
+            indent=1
+        )
+
+        ws.merge_cells(f"G{linea_fila+2}:J{linea_fila+2}")
+        ws[f"G{linea_fila+2}"] = f"RUT: {rut}"
+        ws[f"G{linea_fila+2}"].alignment = Alignment(
+            horizontal="left",
+            indent=1
+        )
+
+        # ------------------------------------------------
+        # IMAGEN FIRMA / TIMBRE EMPLEADOR (CORRIDA A LA DERECHA)
+        # ------------------------------------------------
+        self.insertar_firma_empleador(
+            ws,
+            "assets/firma_timbre.png",
+            linea_fila + 3
+        )
 
         wb.save(ruta)
 
@@ -637,6 +817,11 @@ class DialogoLiquidacion(QDialog):
         self.liquidacion_existente = liquidacion_existente
         self.campos_concepto = {}   # {concepto_id: QDoubleSpinBox}
         self.info_concepto = {}     # {concepto_id: {"grupo":..., "nombre":...}}
+
+        self.ultimo_resultado = None
+        
+        self.motor = MotorCalculoLiquidacion()
+        self.motor_bd = MotorPersistenciaLiquidacion(rrhh_service) 
 
         main_layout = QVBoxLayout(self)
 
@@ -682,10 +867,13 @@ class DialogoLiquidacion(QDialog):
         conceptos_agr = rrhh_service.obtener_conceptos_agrupados()
         for grupo, lista in conceptos_agr.items():
             for c in lista:
+                if c["nombre"] == "GRATIFICACION":
+                    continue
+
                 spin = QDoubleSpinBox()
                 spin.setDecimals(0)
                 spin.setMaximum(999_999_999)
-                spin.valueChanged.connect(self.actualizar_totales_preview)
+                spin.valueChanged.connect(self._evento_recalculo)
 
                 self.campos_concepto[c["id"]] = spin
                 self.info_concepto[c["id"]] = {
@@ -715,16 +903,20 @@ class DialogoLiquidacion(QDialog):
 
         self.lbl_total_hab_impon = QLabel("0")
         self.lbl_total_hab_no_impon = QLabel("0")
+        self.lbl_gratificacion = QLabel("0")
         self.lbl_total_haberes = QLabel("0")
 
         self.lbl_total_desc_prev = QLabel("0")
         self.lbl_total_desc_otros = QLabel("0")
         self.lbl_total_desc_general = QLabel("0")
-
+        self.lbl_gratificacion = QLabel("0")
+        self.lbl_retroactivo = QLabel("0")
         self.lbl_liquido_pagar = QLabel("<b>0</b>")
 
         tot_layout.addRow("TOTAL HABERES IMPONIBLES:", self.lbl_total_hab_impon)
         tot_layout.addRow("TOTAL HABERES NO IMPONIBLES:", self.lbl_total_hab_no_impon)
+        tot_layout.addRow("GRATIFICACION:", self.lbl_gratificacion)
+        tot_layout.addRow("RETROACTIVO:", self.lbl_retroactivo)
         tot_layout.addRow("TOTAL HABERES:", self.lbl_total_haberes)
         tot_layout.addRow("TOTAL DESCUENTOS PREVISIONALES:", self.lbl_total_desc_prev)
         tot_layout.addRow("TOTAL OTROS DESCUENTOS:", self.lbl_total_desc_otros)
@@ -795,8 +987,8 @@ class DialogoLiquidacion(QDialog):
         main_layout.addWidget(scroll)
 
         # Botones
-        self.btn_exportar = QPushButton("Exportar a Excel")
-        self.btn_exportar.clicked.connect(self.exportar_excel)
+        self.btn_exportar = DoubleClickButton("Exportar a Excel")
+        self.btn_exportar.doubleClicked.connect(self.exportar_excel)
 
         self.botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.botones.addButton(self.btn_exportar, QDialogButtonBox.ActionRole)
@@ -807,6 +999,11 @@ class DialogoLiquidacion(QDialog):
 
         # Eventos
         self.trabajador_combo.currentIndexChanged.connect(self._actualizar_datos_trabajador)
+
+        self.trabajador_combo.currentIndexChanged.connect(self._evento_recalculo)
+        self.periodo_edit.textChanged.connect(self._evento_recalculo)
+        self.retro_antiguo.valueChanged.connect(self._evento_recalculo)
+        self.retro_actual.valueChanged.connect(self._evento_recalculo)
 
         # Edit / nuevo
         if self.liquidacion_existente:
@@ -819,6 +1016,217 @@ class DialogoLiquidacion(QDialog):
     # ------------------------------------------------
     # Utilidades internas
     # ------------------------------------------------
+
+    def _obtener_fecha_periodo(self) -> date:
+        texto = self.periodo_edit.text().strip()
+        if not texto:
+            return date.today()
+
+        year, month = map(int, texto.split("-"))
+        return date(year, month, 1)
+
+    
+    def _evento_recalculo(self):
+        try:
+            trabajador = self.trabajador_combo.currentData()
+            if not trabajador:
+                return
+
+            periodo = self.periodo_edit.text().strip()
+            if not periodo:
+                return
+
+            ficha = rrhh_service.obtener_trabajador(trabajador["rut"])
+            if not ficha:
+                return
+            
+            salud_nombre = rrhh_service.obtener_nombre_salud(ficha["sistema_salud_id"])
+
+            self.salud_nombre = salud_nombre
+
+            porcentaje_salud = float(ficha.get("porcentaje_salud") or 7.0)
+
+            self.porcentaje_salud = porcentaje_salud
+
+            # -----------------------------
+            # 1) Separar montos por grupo (USAR codigo con fallback a nombre)
+            # -----------------------------
+            haberes_imponibles: dict[str, float] = {}
+            haberes_no_imponibles: dict[str, float] = {}
+
+            # IMM (fijo por ahora)
+            imm = float(539000)
+
+            for cid, spin in self.campos_concepto.items():
+                info = self.info_concepto.get(cid, {}) or {}
+                grupo = (info.get("grupo") or "").strip().lower()
+                codigo_raw = info.get("codigo") or info.get("nombre")
+                codigo = (
+                    codigo_raw.strip()
+                    .replace(" ", "_")
+                    .replace("%", "")       # ❌ QUITA el porcentaje
+                    .replace("-", "_")
+                    .upper()
+                ) # ← fallback seguro
+
+                if not codigo:
+                    # No tenemos cómo identificar el concepto
+                    print(f"[WARN] Concepto {cid} sin 'codigo' ni 'nombre' en info_concepto: {info}")
+                    continue
+
+                try:
+                    val = float(spin.value())
+                except Exception:
+                    print(f"[WARN] Valor inválido para {codigo} (cid={cid}) -> {spin.value()}")
+                    continue
+
+                if abs(val) < 0.5:
+                    # Evitar llenar con ceros
+                    continue
+
+                if grupo in ("haber_imponible", "imponible"):
+                    haberes_imponibles[codigo] = val
+                elif grupo in ("haber_no_imponible", "no_imponible"):
+                    haberes_no_imponibles[codigo] = val
+                else:
+                    # Si tu catálogo usa otro texto, log para ajustar
+                    print(f"[INFO] Grupo desconocido '{grupo}' para {codigo}; no se clasifica.")
+
+            # -----------------------------
+            # 2) Tasas previsionales
+            # -----------------------------
+            fecha_periodo = self._obtener_fecha_periodo()
+
+            rut = trabajador.get("rut")
+            
+
+            # Tasa AFP desde servicio (evita parseos frágiles)
+            afp_info = rrhh_service.obtener_afp_trabajador(rut, fecha_periodo)
+            afp_tasa = float(afp_info.get("tasa_total") or 0.0)
+            
+            
+            self.lbl_afp_trabajador.setText(
+                afp_info.get("afp_nombre", "")
+            )
+
+            self.lbl_afp_tasa.setText(
+                f"{afp_info.get('afp_tasa', 0) * 100:.2f}%"
+            )
+
+            afp_nombre= afp_info["afp_nombre"]
+            afp_tasa_txt = afp_info["tasa_total_txt"]
+
+           
+
+
+
+            salud_info = rrhh_service.obtener_salud_trabajador(ficha, fecha_periodo)
+
+
+            self.lbl_prev_tasa.setText(salud_info["tasa_txt"])
+
+
+            # Salud: si tienes plan fijo/tasa desde ficha/servicio, úsalo. Si no, parsea el label.
+            salud_porcentaje, salud_plan = self._parse_salud(self.lbl_prev_tasa.text())
+
+            # -----------------------------
+            # 3) Construir INPUT
+            # -----------------------------
+            sueldo_base_val = float(ficha.get("sueldo_base") or 0)
+
+            
+
+            data = InputLiquidacion(
+                periodo=periodo,
+                sueldo_base=sueldo_base_val,
+                haberes_imponibles=haberes_imponibles,
+                haberes_no_imponibles=haberes_no_imponibles,
+                imm=imm,
+                afp_nombre=afp_nombre,
+                afp_tasa_txt=afp_tasa_txt,
+                afp_tasa=afp_tasa,
+                salud_porcentaje=float(salud_porcentaje or 0.07),
+                salud_plan_fijo=float(salud_plan) if salud_plan is not None else None,
+                retro_antiguo=float(self.retro_antiguo.value() or 0),
+                retro_actual=float(self.retro_actual.value() or 0),
+                dias_trabajados=int(round((self.dias_trabajados.value() or 0))),
+                numero_horas_extras=int(round((self.num_horas_extras.value() or 0))),
+                observaciones=self.observaciones_edit.text() or "",
+            )
+
+
+            # -----------------------------
+            # 4) Ejecutar motor
+            # -----------------------------
+            resultado = self.motor.calcular(data)
+            self.ultimo_input = data
+            self.ultimo_resultado = resultado
+
+
+            # -----------------------------
+            # 5) Reflejar resultados
+            # -----------------------------
+            self._reflejar_resultado_motor(resultado)
+
+        except Exception as e:
+            print("Error evento recálculo:", e)
+
+
+    def _parse_porcentaje(self, txt: str) -> float:
+        if "%" in txt:
+            return float(txt.replace("%", "").strip()) / 100
+        return 0.0
+
+
+    def _parse_salud(self, txt: str):
+        if "$" in txt:
+            return 0.07, float(txt.replace("$", "").replace(",", ""))
+        if "%" in txt:
+            return float(txt.replace("%", "")) / 100, None
+        return 0.07, None
+
+    def _reflejar_resultado_motor(self, r: ResultadoLiquidacion):
+
+        # Haberes
+        self.lbl_total_hab_impon.setText(str(int(r.total_haberes_imponibles)))
+        self.lbl_total_hab_no_impon.setText(str(int(r.total_haberes_no_imponibles)))
+
+        self.lbl_gratificacion.setText(str(int(r.montos_por_concepto.get("GRATIFICACION", 0))))
+
+        self.lbl_retroactivo.setText(str(int(r.montos_por_concepto.get("RETROACTIVO"))))
+
+        self.lbl_total_haberes.setText(str(int(r.total_haberes)))
+
+        # Descuentos
+        self.lbl_total_desc_prev.setText(str(int(r.total_descuentos_previsionales)))
+        self.lbl_total_desc_otros.setText(str(int(r.total_descuentos_otros)))
+
+        self.lbl_total_desc_general.setText(str(int(r.total_descuentos_general)))
+
+        # Líquido
+        self.lbl_liquido_pagar.setText(f"<b>{int(r.liquido_pagar)}</b>")
+
+        # Bases
+        self.lbl_base_imponible.setText(str(int(r.base_imponible)))
+        self.lbl_base_tributable.setText(str(int(r.base_tributable)))
+
+        # AFP / Salud (montos)
+        self.lbl_afp_trabajador.setText("AFP")
+        self.lbl_afp_tasa.setText(
+            str(int(r.montos_por_concepto.get("FONDO_PENSIONES", 0)))
+        )
+
+        self.lbl_prev_trabajador.setText("SALUD")
+        self.lbl_prev_tasa.setText(
+            str(int(r.montos_por_concepto.get("PREVISION_7", 0)))
+        )
+
+        
+
+
+
+
+
 
     def _actualizar_datos_trabajador(self):
         t = self.trabajador_combo.currentData()
@@ -863,19 +1271,6 @@ class DialogoLiquidacion(QDialog):
         except Exception as e:
             print("Error precargando sueldo base:", e)
 
-        # ================================
-        #   Actualizar base imponible / tributable
-        # ================================
-        try:
-            base = int(ficha.get("sueldo_base") or 0)
-            self.lbl_base_imponible.setText(str(base))
-            self.lbl_base_tributable.setText(str(base))
-        except Exception as e:
-            print("Error actualizando base imponible:", e)
-
-        # Recalcular totales
-        self.actualizar_totales_preview()
-
 
                 # ==================================================
         #   Cargar tasas AFP / Salud según periodo
@@ -888,12 +1283,13 @@ class DialogoLiquidacion(QDialog):
                 fecha_periodo = periodo_txt + "-01"
 
             # AFP
-            afp_id = ficha.get("afp_id")
-            if afp_id and fecha_periodo:
-                afp_tasa = rrhh_service.obtener_tasa_afp(afp_id, fecha_periodo)
-                if afp_tasa:
-                    self.lbl_afp_tasa.setText(f"{afp_tasa.get('tasa', 0) * 100:.2f} %")
+            if fecha_periodo:
+                afp_info = rrhh_service.obtener_afp_trabajador(ficha, fecha_periodo)
+                if afp_info:
+                    self.lbl_afp_trabajador.setText(afp_info["afp_nombre"])
+                    self.lbl_afp_tasa.setText(afp_info["tasa_txt"])
                 else:
+                    self.lbl_afp_trabajador.setText("-")
                     self.lbl_afp_tasa.setText("-")
 
             # Salud
@@ -907,22 +1303,12 @@ class DialogoLiquidacion(QDialog):
                         self.lbl_prev_tasa.setText(f"${plan_fijo:,}")
                     else:
                         self.lbl_prev_tasa.setText(f"{porcentaje * 100:.2f} %")
+
+            self._evento_recalculo()
         except Exception as e:
             print("Error cargando tasas previsionales:", e)
 
-        try:
-            concepto_grati = None
-            for cid, info in self.info_concepto.items():
-                if info["nombre"] == "GRATIFICACION":
-                    concepto_grati = cid
-                    break
 
-            if concepto_grati and not self.liquidacion_existente:
-                valor = float(ficha.get("sueldo_base") or 0) * 0.25
-                self.campos_concepto[concepto_grati].setValue(valor)
-
-        except Exception as e:
-            print("Error aplicando gratificación:", e)
     
 
 
@@ -966,51 +1352,8 @@ class DialogoLiquidacion(QDialog):
             if spin:
                 spin.setValue(float(monto))
 
-        self.actualizar_totales_preview()
+       
 
-    def actualizar_totales_preview(self):
-        total_impon = 0
-        total_no_impon = 0
-        total_desc_prev = 0
-        total_desc_otro = 0
-
-        for cid, spin in self.campos_concepto.items():
-            monto = spin.value()
-            info = self.info_concepto.get(cid, {})
-            grupo = info.get("grupo")
-            if grupo == "haber_imponible":
-                total_impon += monto
-            elif grupo == "haber_no_imponible":
-                total_no_impon += monto
-            elif grupo == "descuento_previsional":
-                total_desc_prev += monto
-            elif grupo == "descuento_otro":
-                total_desc_otro += monto
-
-        total_haberes = total_impon + total_no_impon
-        total_desc_general = total_desc_prev + total_desc_otro
-        liquido = total_haberes - total_desc_general
-
-        self.lbl_total_hab_impon.setText(str(int(total_impon)))
-        self.lbl_total_hab_no_impon.setText(str(int(total_no_impon)))
-        self.lbl_total_haberes.setText(str(int(total_haberes)))
-        self.lbl_total_desc_prev.setText(str(int(total_desc_prev)))
-        self.lbl_total_desc_otros.setText(str(int(total_desc_otro)))
-        self.lbl_total_desc_general.setText(str(int(total_desc_general)))
-        self.lbl_liquido_pagar.setText(f"<b>{int(liquido)}</b>")
-
-        self.lbl_base_imponible.setText(str(int(total_impon)))
-        self.lbl_base_tributable.setText(str(int(total_impon)))
-
-
-
-        self.total_haberes_imponibles = int(total_impon)
-        self.total_haberes_no_imponibles = int(total_no_impon)
-        self.total_haberes = int(total_haberes)
-        self.total_descuentos_previsionales = int(total_desc_prev)
-        self.total_descuentos_otros = int(total_desc_otro)
-        self.total_descuentos = int(total_desc_general)
-        self.liquido_pagar = int(liquido)
 
         
 
@@ -1028,22 +1371,35 @@ class DialogoLiquidacion(QDialog):
             QMessageBox.warning(self, "Error", "Debe ingresar el periodo (YYYY-MM).")
             return
 
-        cabecera = {
-            "dias_trabajados": self.dias_trabajados.value(),
-            "numero_horas_extras": self.num_horas_extras.value(),
-            "retro_antiguo": self.retro_antiguo.value() or None,
-            "retro_actual": self.retro_actual.value() or None,
-            "retro_diferencia": self.retro_diferencia.value() or None,
-            "observaciones": self.observaciones_edit.text().strip(),
-        }
+        if not self.ultimo_resultado or not self.ultimo_input:
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Debe calcular la liquidación antes de guardar."
+            )
+            return
 
-        montos_por_concepto = {cid: spin.value() for cid, spin in self.campos_concepto.items()}
+        # ================================
+        # 1) Construir persistencia (ÚNICA fuente para BD)
+        # ================================
+        self.motor_bd = MotorPersistenciaLiquidacion(rrhh_service)
+
+        persistencia = self.motor_bd.construir(
+            trabajador=t,
+            periodo=periodo,
+            data=self.ultimo_input,
+            resultado=self.ultimo_resultado,
+        )
+
+        # ================================
+        # 2) Crear o actualizar
+        # ================================
 
         if self.liquidacion_existente:
             ok = rrhh_service.actualizar_liquidacion(
-                self.liquidacion_existente["cabecera"]["id"],
-                cabecera,
-                montos_por_concepto,
+                liq_id=self.liquidacion_existente["cabecera"]["id"],
+                datos_cabecera=persistencia.datos_cabecera,
+                montos_por_concepto=persistencia.detalle,
             )
             if not ok:
                 QMessageBox.warning(self, "Error", "No se pudo actualizar la liquidación.")
@@ -1052,62 +1408,17 @@ class DialogoLiquidacion(QDialog):
             liq_id = rrhh_service.crear_liquidacion(
                 trabajador_rut=t["rut"],
                 periodo=periodo,
-                datos_cabecera=cabecera,
-                montos_por_concepto=montos_por_concepto,
+                datos_cabecera=persistencia.datos_cabecera,
+                montos_por_concepto=persistencia.detalle,
             )
+
             if not liq_id:
                 QMessageBox.warning(self, "Error", "No se pudo crear la liquidación.")
                 return
 
         self.accept()
 
-    def calcular_descuentos_automaticos(self):
-        try:
-            base = float(self.lbl_base_imponible.text() or 0)
-
-            # === AFP ===
-            concepto_afp = None
-            for cid, info in self.info_concepto.items():
-                if info["nombre"] == "FONDO DE PENSIONES":
-                    concepto_afp = cid
-                    break
-            if concepto_afp:
-                tasa_txt = self.lbl_afp_tasa.text().replace("%","").strip()
-                tasa = float(tasa_txt) / 100 if tasa_txt else 0
-                self.campos_concepto[concepto_afp].setValue(base * tasa)
-
-            # === 7% Salud ===
-            concepto_prev = None
-            for cid, info in self.info_concepto.items():
-                if info["nombre"] == "7% Previsión":
-                    concepto_prev = cid
-                    break
-            if concepto_prev:
-                tasa_txt = self.lbl_prev_tasa.text().replace("%","").strip()
-                if tasa_txt.isnumeric():
-                    tasa = float(tasa_txt) / 100
-                    self.campos_concepto[concepto_prev].setValue(base * tasa)
-
-            # === Adicional Isapre si aplica ===
-            concepto_adi = None
-            for cid, info in self.info_concepto.items():
-                if info["nombre"] == "ADICIONAL ISAPRE":
-                    concepto_adi = cid
-                    break
-
-            if concepto_adi:
-                valor = 0
-                txt = self.lbl_prev_tasa.text()
-                if "$" in txt:  # Plan fijo
-                    valor = float(txt.replace("$","").replace(",",""))
-                elif "%" in txt:
-                    porcentaje = float(txt.replace("%",""))
-                    valor = base * porcentaje / 100
-                self.campos_concepto[concepto_adi].setValue(valor)
-
-        except Exception as e:
-            print("Error calculo automático:", e)
-        
+                
 
         
 
@@ -1156,13 +1467,18 @@ class TabLiquidaciones(QWidget):
         ])
         layout.addWidget(self.tabla)
 
+        header = self.tabla.horizontalHeader()
+
+        # Ajusta cada columna a su contenido
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+
         # -----------------------------
         # 3. BOTONES (ABAJO)
         # -----------------------------
         boton_layout = QHBoxLayout()
-        self.btn_nueva = QPushButton("Nueva Liquidación")
-        self.btn_ver = QPushButton("Ver / Editar")
-        self.btn_eliminar = QPushButton("Eliminar")
+        self.btn_nueva = DoubleClickButton("Nueva Liquidación")
+        self.btn_ver = DoubleClickButton("Ver / Editar")
+        self.btn_eliminar = DoubleClickButton("Eliminar")
 
         boton_layout.addWidget(self.btn_nueva)
         boton_layout.addWidget(self.btn_ver)
@@ -1171,9 +1487,9 @@ class TabLiquidaciones(QWidget):
         layout.addLayout(boton_layout)
 
         # Conexiones
-        self.btn_nueva.clicked.connect(self.crear_liquidacion)
-        self.btn_ver.clicked.connect(self.ver_editar_liquidacion)
-        self.btn_eliminar.clicked.connect(self.eliminar_liquidacion)
+        self.btn_nueva.doubleClicked.connect(self.crear_liquidacion)
+        self.btn_ver.doubleClicked.connect(self.ver_editar_liquidacion)
+        self.btn_eliminar.doubleClicked.connect(self.eliminar_liquidacion)
 
         self.todo_liquidaciones = []
         self.cargar_liquidaciones()
@@ -1254,3 +1570,81 @@ class TabLiquidaciones(QWidget):
         if QMessageBox.question(self, "Confirmar", "¿Eliminar la liquidación seleccionada?") == QMessageBox.Yes:
             rrhh_service.eliminar_liquidacion(liq_id)
             self.cargar_liquidaciones()
+
+
+class DialogActualizarTasaAFP(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("Actualizar tasa AFP")
+
+        self.afp_combo = QComboBox()
+        self.cargar_afps()
+
+        self.tasa_cotizacion = QDoubleSpinBox()
+        self.tasa_cotizacion.setDecimals(4)
+        self.tasa_cotizacion.setRange(0, 100)
+
+        self.tasa_sis = QDoubleSpinBox()
+        self.tasa_sis.setDecimals(4)
+        self.tasa_sis.setRange(0, 100)
+
+        self.fecha_vigencia = QDateEdit()
+        self.fecha_vigencia.setCalendarPopup(True)
+        self.fecha_vigencia.setDate(QDate.currentDate())
+
+        btn_guardar = DoubleClickButton("Guardar")
+        btn_guardar.doubleClicked.connect(self.guardar)
+
+        layout = QFormLayout(self)
+        layout.addRow("AFP", self.afp_combo)
+        layout.addRow("Tasa cotización (%)", self.tasa_cotizacion)
+        layout.addRow("Tasa SIS (%)", self.tasa_sis)
+        layout.addRow("Vigente desde", self.fecha_vigencia)
+        layout.addRow(btn_guardar)
+
+
+    def validar(self):
+        if self.afp_combo.currentData() is None:
+            raise ValueError("Debe seleccionar una AFP")
+
+        if self.tasa_cotizacion.value() <= 0:
+            raise ValueError("La tasa de cotización debe ser mayor a 0")
+
+        if self.tasa_sis.value() < 0:
+            raise ValueError("La tasa SIS no puede ser negativa")
+        
+    def cargar_afps(self):
+        afps = rrhh_service.obtener_afps()
+        self.afp_combo.clear()
+        for a in afps:
+            self.afp_combo.addItem(a["nombre"], a["id"])
+
+    def guardar(self):
+        try:
+            afp_id = self.afp_combo.currentData()
+            if not afp_id:
+                raise ValueError("Debe seleccionar una AFP")
+
+            tasa = self.tasa_cotizacion.value() / 100
+            sis = self.tasa_sis.value() / 100
+
+            fecha = self.fecha_vigencia.date().toPython()
+
+            rrhh_service.actualizar_tasa_afp_supabase(
+                afp_id,
+                fecha,
+                tasa,
+                sis
+            )
+
+            QMessageBox.information(
+                self,
+                "OK",
+                "Tasa AFP actualizada correctamente"
+            )
+            self.accept()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+

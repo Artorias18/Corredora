@@ -1,26 +1,93 @@
-from PySide6.QtWidgets import QMainWindow, QLabel, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
-from gui import ventas, arriendos, rrhh, finanzas, gestion_usuarios, admin_condominios, propiedades
+
+from gui import ventas, arriendos, rrhh, finanzas, gestion_usuarios, propiedades, sesion_usuario
+
 
 class MainWindow(QMainWindow):
-    def __init__(self, rol):
+    def __init__(self, user_id, rol, start_tab=0):
         super().__init__()
+        self.user_id = user_id
+        self.rol = rol
+
         self.setWindowTitle("Panel Principal")
+        self.showMaximized()
 
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
-        self.showMaximized()
-        self.tabs.addTab(ventas.DashboardVentas(rol), "Ventas")
-        self.tabs.addTab(arriendos.DashboardArriendos(), "Arriendos")
-        self.tabs.addTab(propiedades.DashboardPropiedades(), "Propiedades")
-        self.tabs.addTab(rrhh.DashboardRRHH(), "RRHH")
-        self.tabs.addTab(finanzas.DashboardFinanzas(), "Finanzas")
 
-        if rol == "superusuario":
-            self.tabs.addTab(gestion_usuarios.DashboardUsuarios(), "Gestión de Usuarios")
-        elif rol == "admin":
-            pass  # mismo acceso que superusuario, sin gestión de usuarios
-        elif rol == "usuario":
-            # aquí podrías ocultar o restringir algunos módulos
-            self.tabs.clear()  # ejemplo: quitar todo y mostrar solo uno
-            self.tabs.addTab(ventas.DashboardVentas(rol), "Ventas")
+        # ─── Placeholders (QWidget, NO QLabel) ──────────────
+        self.placeholders = []
+        for _ in range(5):
+            w = QWidget()
+            w.setLayout(QVBoxLayout())
+            w.layout().setContentsMargins(0, 0, 0, 0)
+            self.placeholders.append(w)
+
+        self.tabs.addTab(self.placeholders[0], "Ventas")
+        self.tabs.addTab(self.placeholders[1], "Arriendos")
+        # self.tabs.addTab(self.placeholders[2], "Propiedades")
+        self.tabs.addTab(self.placeholders[2], "RRHH")
+        self.tabs.addTab(self.placeholders[3], "Finanzas")
+
+        # ─── Lazy map ──────────────────────────────────────
+        self.tab_map = {
+            0: lambda: ventas.DashboardVentas(self.rol),
+            1: lambda: arriendos.DashboardArriendos(),
+            # 2: lambda: propiedades.DashboardPropiedades(),
+            2: lambda: rrhh.DashboardRRHH(self.user_id),
+            3: lambda: finanzas.DashboardFinanzas(),
+        }
+
+        self.loaded_tabs = set()
+
+        # ─── Gestión por rol ───────────────────────────────
+        if self.rol == "superusuario":
+            w = QWidget()
+            w.setLayout(QVBoxLayout())
+            self.tabs.addTab(w, "Gestión de Usuarios")
+            idx = self.tabs.count() - 1
+            self.tab_map[idx] = lambda: gestion_usuarios.DashboardUsuarios(self.user_id)
+
+        elif self.rol == "usuario":
+            # ocultar módulos
+            self.tabs.setTabVisible(2, False)  # Propiedades
+            self.tabs.setTabVisible(3, False)  # RRHH
+            self.tabs.setTabVisible(4, False)  # Finanzas
+
+            # módulo sesión
+            w = QWidget()
+            w.setLayout(QVBoxLayout())
+            self.tabs.addTab(w, "Mi sesión")
+            idx = self.tabs.count() - 1
+            self.tab_map[idx] = lambda: sesion_usuario.ModuloSesion()
+
+        # ─── Señales ───────────────────────────────────────
+        self.tabs.currentChanged.connect(self.cargar_tab)
+
+        self.tabs.setCurrentIndex(start_tab)
+        self.cargar_tab(start_tab)
+
+    def cargar_tab(self, index):
+        if index in self.loaded_tabs:
+            return
+        if index not in self.tab_map:
+            return
+
+        container = self.tabs.widget(index)
+        widget = self.tab_map[index]()
+        container.layout().addWidget(widget)
+
+        if hasattr(widget, "logout_signal"):
+            widget.logout_signal.connect(self.handle_logout)
+
+        self.loaded_tabs.add(index)
+
+    def handle_logout(self):
+        from gui.login_window import LoginWindow
+        from utils.session_storage import SessionStorage
+
+        SessionStorage.clear_session()
+        self.close()
+        self.login = LoginWindow()
+        self.login.show()

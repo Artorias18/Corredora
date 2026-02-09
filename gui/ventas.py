@@ -45,6 +45,8 @@ class DetalleVentaWindow(QWidget):
         # Pestaña de información general
         self.setup_tab_info_general()
         
+        self.setup_tab_pago()
+
         # Pestaña de comprador
         self.setup_tab_comprador()
         
@@ -77,16 +79,16 @@ class DetalleVentaWindow(QWidget):
             
         
         # Botón para cerrar
-        btn_cerrar = QPushButton("Cerrar")
-        btn_cerrar.clicked.connect(self.close)
+        btn_cerrar = DoubleClickButton("Cerrar")
+        btn_cerrar.doubleClicked.connect(self.close)
         layout_contenido.addWidget(btn_cerrar)
         
-        self.btn_editar = QPushButton("Editar Venta")
-        self.btn_editar.clicked.connect(self.abrir_formulario_edicion)
+        self.btn_editar = DoubleClickButton("Editar Venta")
+        self.btn_editar.doubleClicked.connect(self.abrir_formulario_edicion)
         layout_contenido.addWidget(self.btn_editar)
 
-        self.btnEliminar = QPushButton("Eliminar Venta")
-        self.btnEliminar.clicked.connect(self.eliminar_venta)
+        self.btnEliminar = DoubleClickButton("Eliminar Venta")
+        self.btnEliminar.doubleClicked.connect(self.eliminar_venta)
         layout_contenido.addWidget(self.btnEliminar)
 
 
@@ -175,6 +177,26 @@ class DetalleVentaWindow(QWidget):
         for label, value in campos:
             if value:
                 layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
+    def setup_tab_pago(self):
+        tab = QWidget()
+        self.tabs.addTab(tab, "Información Pago")
+        layout = QFormLayout(tab)
+        
+        venta = self.detalle_venta.get('venta', {})
+
+        campos = [
+            ("¿Comprador pago?", venta.get('comprador_pago')),
+            ("¿Vendedor pago?", venta.get('vendedor_pago')),
+            ("¿Cuando paga comprador?", venta.get('comprador_cuando_paga')),
+            ("¿Cuando paga vendedor?", venta.get('vendedor_cuando_paga')),
+            ("Tipo documento", venta.get("tipo_documento"))
+        ]
+
+        for label, value in campos:
+            if value:
+                layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
+
     
     def setup_tab_comprador(self):
         tab = QWidget()
@@ -599,14 +621,14 @@ class DashboardVentas(QWidget):
         button_layout = QHBoxLayout()
 
         
-        self.btn_agregar_cerrada = QPushButton("Agregar Venta")
-        self.btn_agregar_cerrada.clicked.connect(lambda: self.abrir_formulario_venta(en_proceso=False))
+        self.btn_agregar_cerrada = DoubleClickButton("Agregar Venta")
+        self.btn_agregar_cerrada.doubleClicked.connect(lambda: self.abrir_formulario_venta(en_proceso=False))
         
         self.btn_actualizar = QPushButton("Actualizar Lista")
         self.btn_actualizar.clicked.connect(self.cargar_ventas)
         
-        self.btn_exportar = QPushButton("Exportar a Excel")
-        self.btn_exportar.clicked.connect(self.exportar_a_excel)
+        self.btn_exportar = DoubleClickButton("Exportar a Excel")
+        self.btn_exportar.doubleClicked.connect(self.exportar_a_excel)
         
  
         
@@ -623,10 +645,15 @@ class DashboardVentas(QWidget):
     def cargar_ventas(self):
         try:
             self.cargando_tabla = True
-            
 
+            # 🔒 BLOQUEO TOTAL
+            self.tabla_ventas.setSortingEnabled(False)
+            self.tabla_ventas.blockSignals(True)
+            self.tabla_ventas.setUpdatesEnabled(False)
 
+            self.tabla_ventas.clearContents()
             self.tabla_ventas.setRowCount(0)
+
             estado_filtro = self.filtro_estado.currentText()
 
             if estado_filtro == "Todas las ventas":
@@ -634,40 +661,42 @@ class DashboardVentas(QWidget):
             else:
                 ventas = obtener_ventas_por_estado(estado_filtro)
 
-            if ventas:
-                self.tabla_ventas.setRowCount(len(ventas))
-                self.ventas = ventas or []
-            
+            self.ventas = ventas or []
 
-                self.tabla_ventas.setUpdatesEnabled(False)  # 🔸 Pausa el renderizado de la tabla
-            try:
-                for row, venta in enumerate(ventas):
-                    self.tabla_ventas.setItem(row, 0, QTableWidgetItem(str(venta.get("id", ""))))
-                    self.tabla_ventas.setItem(row, 1, QTableWidgetItem(venta.get("comprador", "")))
-                    self.tabla_ventas.setItem(row, 2, QTableWidgetItem(venta.get("vendedor", "")))
-                    self.tabla_ventas.setItem(row, 3, QTableWidgetItem(venta.get("propiedad", "")))
-                    self.tabla_ventas.setItem(row, 4, QTableWidgetItem(str(venta.get("fecha_venta", ""))))
+            if not ventas:
+                return
 
-                    # ✅ Aquí aplicas tu mapeo sin problemas visuales
-                    estado_venta = venta.get("estado_venta", "").replace("_", " ").capitalize()
-                    self.tabla_ventas.setItem(row, 5, QTableWidgetItem(estado_venta))
+            self.tabla_ventas.setRowCount(len(ventas))
 
-                    self.tabla_ventas.setItem(row, 6, QTableWidgetItem(venta.get("tipo_venta", "")))
-            finally:
-                self.tabla_ventas.setUpdatesEnabled(True)   # 🔸 Reactiva el renderizado
-                self.tabla_ventas.resizeColumnsToContents()
-                self.tabla_ventas.setColumnHidden(0, True)
-            
+            for row, venta in enumerate(ventas):
+                self.tabla_ventas.setItem(row, 0, QTableWidgetItem(str(venta.get("id", ""))))
+                self.tabla_ventas.setItem(row, 1, QTableWidgetItem(venta.get("comprador", "")))
+                self.tabla_ventas.setItem(row, 2, QTableWidgetItem(venta.get("vendedor", "")))
+                self.tabla_ventas.setItem(row, 3, QTableWidgetItem(venta.get("propiedad", "")))
+                self.tabla_ventas.setItem(row, 4, QTableWidgetItem(str(venta.get("fecha_venta", ""))))
+
+                estado_venta = venta.get("estado_venta", "").replace("_", " ").capitalize()
+                self.tabla_ventas.setItem(row, 5, QTableWidgetItem(estado_venta))
+
+                self.tabla_ventas.setItem(row, 6, QTableWidgetItem(venta.get("tipo_venta", "")))
+
+            # 🎯 AJUSTES VISUALES (AÚN SIN SORTING)
+            self.tabla_ventas.resizeColumnsToContents()
+            self.tabla_ventas.setColumnHidden(0, True)
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudieron cargar las ventas: {str(e)}")
 
         finally:
+            # 🔓 REACTIVAR TODO
+            self.tabla_ventas.setUpdatesEnabled(True)
+            self.tabla_ventas.blockSignals(False)
+            self.tabla_ventas.setSortingEnabled(True)
+
             self.cargando_tabla = False
 
-    
 
-    
+        
     def filtrar_ventas(self):
         texto = self.search_input.text().lower()
         estado = self.filtro_estado.currentText()
@@ -779,7 +808,15 @@ class DashboardVentas(QWidget):
 
     
     
+class DoubleClickButton(QPushButton):
+    doubleClicked = Signal()
 
+    def mouseDoubleClickEvent(self, event):
+        self.doubleClicked.emit()
+
+
+        
+    
 
 class FormularioVenta(QWidget):
     venta_guardada = Signal()
@@ -791,6 +828,7 @@ class FormularioVenta(QWidget):
         self.setWindowTitle("Editar Venta" if venta_id else "Nueva Venta Cerrada")
         self.resize(900, 700)
         self.detalle_venta = {}
+        self.solo_propiedad = False 
         
         # Layout principal con scroll
         layout_principal = QVBoxLayout(self)
@@ -811,6 +849,12 @@ class FormularioVenta(QWidget):
         tab_basica = QWidget()
         self.tabs.addTab(tab_basica, "Información Básica")
         self.setup_tab_basica(tab_basica)
+
+
+        # Información Pago
+        tab_pago = QWidget()
+        self.tabs.addTab(tab_pago, "Información Pago")
+        self.setup_tab_pago(tab_pago)
         
         # Pestaña de comprador
         tab_comprador = QWidget()
@@ -863,11 +907,6 @@ class FormularioVenta(QWidget):
         self.tabs.addTab(tab_docs_pas, "Documentos PAS")
         self.setup_tab_docs_pas(tab_docs_pas)
         self.tab_docs_pas_index = self.tabs.indexOf(tab_docs_pas)
-
-        # === Estado de la venta (combo) ===
-        # Aquí asumimos que en la pestaña de Información Básica tienes un combo self.cmb_estado
-        self.cmb_estado.currentTextChanged.connect(lambda: self.aplicar_estado_ui(self.cmb_estado.currentText()))
-           # Cambiar el nombre de la señal conectada para mayor claridad
            
         self.cmb_tipo_venta.currentTextChanged.connect(self.toggle_pos_efectiva_tab)
         self.toggle_pos_efectiva_tab(self.cmb_tipo_venta.currentText())
@@ -894,8 +933,8 @@ class FormularioVenta(QWidget):
 
         
         # Botón de guardar
-        btn_guardar = QPushButton("Guardar Venta")
-        btn_guardar.clicked.connect(self.guardar_venta)
+        btn_guardar = DoubleClickButton("Guardar Venta")
+        btn_guardar.doubleClicked.connect(self.guardar_venta)
         layout_form.addWidget(btn_guardar)
         
         # Estilo para campos obligatorios
@@ -914,19 +953,7 @@ class FormularioVenta(QWidget):
         
         
 
-    def aplicar_estado_ui(self, estado):
-        """Ajusta las pestañas visibles según el estado de la venta."""
-        # en_proceso = estado.lower() == "en proceso"
 
-        # # Ocultar o mostrar pestañas según el estado
-        # self.tabs.setTabVisible(self.tab_pos_efectiva_index, not en_proceso)
-        # self.tabs.setTabVisible(self.tab_tasador_index, not en_proceso)
-        # self.tabs.setTabVisible(self.tab_prea_credito_index, not en_proceso)
-        # self.tabs.setTabVisible(self.tab_prea_subsidio_index, not en_proceso)
-        # self.tabs.setTabVisible(self.tab_confeccion_subsidio_index, not en_proceso)
-        # self.tabs.setTabVisible(self.tab_confeccion_credito_index, not en_proceso)
-        # self.tabs.setTabVisible(self.tab_docs_pas_index, not en_proceso)
-        return
 
     def setup_tab_basica(self, tab):
         layout = QFormLayout(tab)
@@ -945,16 +972,22 @@ class FormularioVenta(QWidget):
         # Estado (solo para ventas cerradas)
         self.cmb_estado = QComboBox()
         self.cmb_estado.addItems([
-            "En Proceso",
             "Negociandose",
             "Cerrada verbalmente",
+            "En Proceso",
             "Cerrada en notaria",
             "Inscrita"
         ])
-        
-        
+
+      
+        self.cmb_estado.currentTextChanged.connect(self.aplicar_estado_ui)
+
+        self.aplicar_estado_ui(self.cmb_estado.currentText())
+                        
+                
         # Fecha
         self.date_fecha = QDateEdit(QDate.currentDate())
+
         self.date_fecha.setCalendarPopup(True)
         
         # Monto
@@ -982,8 +1015,51 @@ class FormularioVenta(QWidget):
         layout.addRow(self.crear_label("Fecha:", True), self.date_fecha)
         layout.addRow(self.crear_label("Monto:"), self.txt_monto)
         layout.addRow(self.crear_label("Observaciones:"), self.txt_observaciones)
-        layout.addRow(self.crear_label("Propiedad ofrecida:", True), self.cmb_prop_ofrecida)
+        layout.addRow(self.crear_label("Propiedad subida:", True), self.cmb_prop_ofrecida)
         layout.addRow(self.crear_label("Regularizaciones:"), self.cmb_regularizaciones)
+
+
+    def setup_tab_pago(self, tab):
+        layout = QFormLayout(tab)
+
+        self.cmb_comprador_pago = QComboBox()
+        self.cmb_comprador_pago.addItems(["Si", "No"])
+
+        self.cmb_vendedor_pago = QComboBox()
+        self.cmb_vendedor_pago.addItems(["Si", "No"])
+
+        self.cmb_comprador_cuando_paga = QComboBox()
+        self.cmb_comprador_cuando_paga.addItems(["Promesa", "Escritura", "Inscrita", "Cuando recibe todo"])
+
+        self.cmb_vendedor_cuando_paga = QComboBox()
+        self.cmb_vendedor_cuando_paga.addItems(["Promesa", "Escritura", "Inscrita", "Cuando recibe todo"])
+
+        self.cmb_tipo_doc_venta = QComboBox()
+        self.cmb_tipo_doc_venta.addItems(["Boleta", "Factura"])
+
+        layout.addRow(self.crear_label("¿Comprador pago?"), self.cmb_comprador_pago)
+        layout.addRow(self.crear_label("¿Vendedor pago?"), self.cmb_vendedor_pago)
+
+        layout.addRow(self.crear_label("Cuando paga comprador"), self.cmb_comprador_cuando_paga)
+        layout.addRow(self.crear_label("Cuando paga vendedor"), self.cmb_vendedor_cuando_paga)
+
+        layout.addRow(self.crear_label("Tipo Documento"), self.cmb_tipo_doc_venta)
+
+
+        
+
+
+    
+    def aplicar_estado_ui(self, estado: str):
+        estado = estado.lower()
+
+        # Estados donde SOLO se valida propiedad
+        estados_solo_propiedad = {
+            "negociandose",
+            "cerrada verbalmente"
+        }
+
+        self.solo_propiedad = estado in estados_solo_propiedad
         
     def toggle_pos_efectiva_tab(self, tipo_venta):
         if not hasattr(self, 'tab_pos_efectiva_index'):
@@ -1472,11 +1548,11 @@ class FormularioVenta(QWidget):
         
         # Botones para herederos
         btn_layout = QHBoxLayout()
-        self.btn_agregar_heredero = QPushButton("Agregar Heredero")
-        self.btn_agregar_heredero.clicked.connect(self.agregar_heredero)
+        self.btn_agregar_heredero = DoubleClickButton("Agregar Heredero")
+        self.btn_agregar_heredero.doubleClicked.connect(self.agregar_heredero)
         
-        self.btn_eliminar_heredero = QPushButton("Eliminar Heredero")
-        self.btn_eliminar_heredero.clicked.connect(self.eliminar_heredero)
+        self.btn_eliminar_heredero = DoubleClickButton("Eliminar Heredero")
+        self.btn_eliminar_heredero.doubleClicked.connect(self.eliminar_heredero)
         
         btn_layout.addWidget(self.btn_agregar_heredero)
         btn_layout.addWidget(self.btn_eliminar_heredero)
@@ -1709,6 +1785,11 @@ class FormularioVenta(QWidget):
                     'certificado_numero': self.cmb_certificado_numero.currentText(),
                     'aseo': self.cmb_aseo.currentText(),
                     'no_expropiacion': self.cmb_no_expropiacion.currentText(),
+                    'comprador_pago': self.cmb_comprador_pago.currentText(),
+                    'vendedor_pago': self.cmb_vendedor_pago.currentText(),
+                    'comprador_cuando_paga':self.cmb_comprador_cuando_paga.currentText(),
+                    'vendedor_cuando_paga':self.cmb_vendedor_cuando_paga.currentText(),
+                    'tipo_documento': self.cmb_tipo_doc_venta.currentText(),
                     'abono_previsto': self.txt_abono_previo.text(),
                     'abono_real': self.txt_abono_real.text()
                 }
@@ -1776,22 +1857,37 @@ class FormularioVenta(QWidget):
             QMessageBox.critical(self, "Error", f"No se pudo guardar la venta: {str(e)}")
     
     def validar_campos_obligatorios(self):
-        # Validar campos obligatorios básicos
+        errores = []
+
+        # 🔹 Siempre se valida propiedad
         campos_obligatorios = [
             (self.txt_prop_codigo.text(), "Código de propiedad"),
             (self.txt_prop_direccion.text(), "Dirección de propiedad"),
             (self.txt_prop_rol.text(), "ROL de propiedad"),
-            (self.txt_prop_comuna.text(), "Comuna de propiedad")
+            (self.txt_prop_comuna.text(), "Comuna de propiedad"),
         ]
-        
-        if not self.en_proceso:
 
+        # 🔸 Solo si NO es negociación / verbal
+        if not self.solo_propiedad:
             campos_obligatorios += [
                 (self.txt_comp_nombre.text(), "Nombre del comprador"),
                 (self.txt_comp_rut.text(), "RUT del comprador"),
                 (self.txt_vend_nombre.text(), "Nombre del vendedor"),
                 (self.txt_vend_rut.text(), "RUT del vendedor"),
             ]
+
+        # Validación real
+        for valor, nombre in campos_obligatorios:
+            if not valor.strip():
+                errores.append(nombre)
+
+        if errores:
+            QMessageBox.warning(
+                self,
+                "Campos obligatorios",
+                "Faltan los siguientes campos:\n\n• " + "\n• ".join(errores)
+            )
+            return False
 
 
         for valor, nombre in campos_obligatorios:
@@ -1800,7 +1896,7 @@ class FormularioVenta(QWidget):
                 return False
         
         # Validar RUTs
-        if not self.en_proceso:
+        if not self.solo_propiedad:
             if not self.validar_rut(self.txt_comp_rut.text()):
                 QMessageBox.warning(self, "RUT inválido", "El RUT del comprador no es válido")
                 return False
@@ -1890,6 +1986,14 @@ class FormularioVenta(QWidget):
             index = self.cmb_estado.findText(estado_combo, Qt.MatchFixedString)
             if index >= 0:
                 self.cmb_estado.setCurrentIndex(index)
+
+            self.cmb_comprador_pago.setCurrentText(venta.get("comprador_pago"))
+            self.cmb_comprador_cuando_paga.setCurrentText(venta.get("comprador_cuando_paga"))
+
+            self.cmb_comprador_pago.setCurrentText(venta.get("vendedor_pago"))
+            self.cmb_comprador_cuando_paga.setCurrentText(venta.get("vendedor_cuando_paga"))
+
+            self.cmb_tipo_doc_venta.setCurrentText(venta.get("tipo_documento"))
                                     
 
             # Obtener comprador

@@ -2,8 +2,12 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QHBoxLayout, QMessageBox, QDialog, QLineEdit, QComboBox, QLabel, QFormLayout, QInputDialog
 )
-from services.supabase_client import supabase
+from services.supabase_client import supabase, supabase_admin
 from PySide6.QtCore import Qt
+from utils.session_storage import SessionStorage
+from PySide6.QtCore import Signal
+from gui.diagnostico import DiagnosticoWindow
+from gui.usuario_actual import UsuarioActual
 
 
 class DialogUsuario(QDialog):
@@ -27,8 +31,8 @@ class DialogUsuario(QDialog):
         lay.addRow("Nombre:", self.nombre)
         lay.addRow("Rol:",    self.rol)
 
-        self.btn_ok = QPushButton("Guardar")
-        self.btn_ok.clicked.connect(self.accept)
+        self.btn_ok = DoubleClickButton("Guardar")
+        self.btn_ok.doubleClicked.connect(self.accept)
         lay.addRow(self.btn_ok)
 
     def datos(self):
@@ -39,13 +43,14 @@ class DialogUsuario(QDialog):
         }
 
 class DashboardUsuarios(QWidget):
-    def __init__(self):
+    logout_signal = Signal()
+    def __init__(self, user_id):
         super().__init__()
+        self.user_id = user_id
         self.setWindowTitle("Gestión de usuarios")
         self.resize(600, 400)
 
         vbox = QVBoxLayout(self)
-
         # tabla
         self.tabla = QTableWidget(0, 4, self)
         self.tabla.setHorizontalHeaderLabels(["ID", "Email", "Nombre", "Rol"])
@@ -54,22 +59,51 @@ class DashboardUsuarios(QWidget):
 
         # botones
         hbox = QHBoxLayout()
-        self.btn_nuevo   = QPushButton("Nuevo")
-        self.btn_editar  = QPushButton("Editar")
-        self.btn_borrar  = QPushButton("Eliminar")
+        self.btn_nuevo   = DoubleClickButton("Nuevo")
+        self.btn_editar  = DoubleClickButton("Editar")
+        self.btn_borrar  = DoubleClickButton("Eliminar")
+        self.btn_logout  = DoubleClickButton("Cerrar sesión")   # <-- BOTÓN
+        self.btn_diagnostico = DoubleClickButton("Diagnóstico")
+        
+
+
         hbox.addWidget(self.btn_nuevo)
         hbox.addWidget(self.btn_editar)
         hbox.addWidget(self.btn_borrar)
+        hbox.addWidget(self.btn_logout)                    # <-- BOTÓN
+        hbox.addWidget(self.btn_diagnostico)
+
         vbox.addLayout(hbox)
 
         # señales
-        self.btn_nuevo.clicked.connect(self.alta)
-        self.btn_editar.clicked.connect(self.editar)
-        self.btn_borrar.clicked.connect(self.borrar)
-
+        self.btn_nuevo.doubleClicked.connect(self.alta)
+        self.btn_editar.doubleClicked.connect(self.editar)
+        self.btn_borrar.doubleClicked.connect(self.borrar)
+        self.btn_logout.doubleClicked.connect(self.logout)       # <-- SEÑAL
+        self.btn_diagnostico.doubleClicked.connect(self.open_diagnostico)
         self.cargar_datos()
 
     # ----- CRUD -----
+
+    def setup_menu(self):
+        # ... tu código actual
+        if UsuarioActual.rol in ["admin", "superusuario"]:
+            self.btn_diagnostico = DoubleClickButton("Diagnóstico")
+            self.btn_diagnostico.doubleClicked.connect(self.open_diagnostico)
+            self.layout.addWidget(self.btn_diagnostico)
+
+    def get_user_role(self,user_id):
+
+        response = supabase.table('usuarios').select('rol').eq('id',user_id).execute()
+
+        if response.data:
+            rol = response.data[0]['rol']
+            UsuarioActual.id = user_id
+            UsuarioActual.rol = rol
+            self.message_label.setText(f"Rol: {rol}")
+            self.redirect_to_dashboard(rol)
+        else:
+            self.message_label.setText("Usuario no encontrado en la base de datos")
 
     def cargar_datos(self):
         self.tabla.setRowCount(0)
@@ -81,6 +115,13 @@ class DashboardUsuarios(QWidget):
             self.tabla.setItem(fila, 1, QTableWidgetItem(usr["email"]))
             self.tabla.setItem(fila, 2, QTableWidgetItem(usr["nombre"]))
             self.tabla.setItem(fila, 3, QTableWidgetItem(usr["rol"]))
+
+
+    
+
+    def open_diagnostico(self):
+        self.diagnostico = DiagnosticoWindow(self.user_id)
+        self.diagnostico.show()
 
     def alta(self):
         dlg = DialogUsuario(parent=self)
@@ -96,19 +137,17 @@ class DashboardUsuarios(QWidget):
             "Introduce la contraseña para el nuevo usuario:",
             QLineEdit.Password
         )
-        if not ok or not pwd:          # canceló o dejó vacío
+        if not ok or not pwd:
             return
 
         try:
-            # 1) crear la cuenta en Auth con esa contraseña
-            auth = supabase.auth.admin.create_user({
+            auth = supabase_admin.auth.admin.create_user({
                 "email": datos["email"],
                 "password": pwd,
-                "email_confirm": True          # opcional: lo marca como verificado
+                "email_confirm": True
             })
             uid = auth.user.id
 
-            # 2) insertar fila en la tabla usuarios
             datos["id"] = uid
             supabase.table("usuarios").insert(datos).execute()
 
@@ -118,17 +157,17 @@ class DashboardUsuarios(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo crear el usuario:\n{e}")
 
-        def fila_sel(self):
-            idx = self.tabla.currentRow()
-            if idx < 0:
-                QMessageBox.warning(self, "Atención", "Selecciona un usuario.")
-                return None
-            return {
-                "id":     self.tabla.item(idx, 0).text(),
-                "email":  self.tabla.item(idx, 1).text(),
-                "nombre": self.tabla.item(idx, 2).text(),
-                "rol":    self.tabla.item(idx, 3).text()
-            }
+    def fila_sel(self):
+        idx = self.tabla.currentRow()
+        if idx < 0:
+            QMessageBox.warning(self, "Atención", "Selecciona un usuario.")
+            return None
+        return {
+            "id":     self.tabla.item(idx, 0).text(),
+            "email":  self.tabla.item(idx, 1).text(),
+            "nombre": self.tabla.item(idx, 2).text(),
+            "rol":    self.tabla.item(idx, 3).text()
+        }
 
     def editar(self):
         usr = self.fila_sel()
@@ -137,7 +176,7 @@ class DashboardUsuarios(QWidget):
         dlg = DialogUsuario(usr, self)
         if dlg.exec() == QDialog.Accepted:
             datos = dlg.datos()
-            supabase.table("usuarios").update(datos).eq("id", usr["id"]).execute()
+            supabase_admin.table("usuarios").update(datos).eq("id", usr["id"]).execute()
             self.cargar_datos()
 
     def borrar(self):
@@ -146,9 +185,26 @@ class DashboardUsuarios(QWidget):
             return
         if QMessageBox.question(self, "Confirmar",
                                 f"¿Eliminar usuario {usr['email']}?") == QMessageBox.Yes:
-            # Borra en tabla usuarios …
             supabase.table("usuarios").delete().eq("id", usr["id"]).execute()
-            # … y en Auth (requiere service_role o RPC)
-            supabase.auth.admin.delete_user(usr["id"])
+            supabase_admin.auth.admin.delete_user(usr["id"])
             self.cargar_datos()
 
+    # -------------------------------
+    #   CERRAR SESIÓN
+    # -------------------------------
+
+    def logout(self):
+        SessionStorage.clear_session()
+        self.logout_signal.emit()
+
+
+
+class DoubleClickButton(QPushButton):
+    doubleClicked = Signal()
+
+    def mouseDoubleClickEvent(self, event):
+        self.doubleClicked.emit()
+
+
+        
+    

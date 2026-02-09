@@ -36,3 +36,6 @@ def validar_rut(rut: str) -> bool:
         dv_calculado = str(dv_calculado)
 
     return dv == dv_calculado
+
+
+

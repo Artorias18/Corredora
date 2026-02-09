@@ -132,6 +132,117 @@ def obtener_afps():
         return []
 
 
+def actualizar_tasa_afp_supabase(
+    afp_id: str,
+    fecha,
+    tasa_cotizacion: float,
+    tasa_sis: float,
+):
+    response = supabase.rpc(
+        "actualizar_tasa_afp",
+        {
+            "p_afp_id": afp_id,
+            "p_fecha": fecha.isoformat(),
+            "p_tasa_cotizacion": tasa_cotizacion,
+            "p_tasa_sis": tasa_sis,
+        }
+    ).execute()
+
+        # CORRECCIÓN: verificar existencia de error
+    if getattr(response, "error", None):
+        raise Exception(response.error.message)
+
+
+
+
+
+def obtener_tasa_afp_vigente(afp_id: str, fecha: date) -> dict | None:
+    response = (
+        supabase
+        .table("afp_tasa")
+        .select("tasa_cotizacion, tasa_sis")
+        .eq("afp_id", afp_id)
+        .lte("vigente_desde", fecha)
+        .or_(f"vigente_hasta.is.null, vigente_hasta.gte.{fecha.isoformat()}")
+        .order("vigente_desde", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if response.data:
+        return response.data[0]
+
+    return None
+
+
+
+from datetime import date
+
+def obtener_afp_trabajador(trabajador: dict | str, fecha: date) -> dict:
+    # Permitir pasar rut o ficha completa
+    if isinstance(trabajador, dict):
+        afp_id = trabajador.get("afp_id")
+    else:
+        ficha = obtener_trabajador(trabajador)
+        afp_id = ficha.get("afp_id") if ficha else None
+
+    if not afp_id:
+        return {
+            "afp_tasa": 0.0,
+            "tasa_txt": "0%",
+            "afp_nombre": "-",
+            "sis_tasa": 0.0,
+            "sis_txt": "0%",
+            "tasa_total": 0.0,
+            "tasa_total_txt": "0%"
+        }
+
+    # -----------------------------
+    # 1) Nombre AFP
+    # -----------------------------
+    afp_resp = (
+        supabase.table("afp")
+        .select("nombre")
+        .eq("id", afp_id)
+        .execute()
+    )
+    afp_data = afp_resp.data or []
+    afp_nombre = afp_data[0]["nombre"] if afp_data else "-"
+
+    # -----------------------------
+    # 2) Tasa AFP vigente
+    # -----------------------------
+    tasa_resp = (
+        supabase.table("afp_tasa")
+        .select("tasa_cotizacion,tasa_sis")
+        .eq("afp_id", afp_id)
+        .lte("vigente_desde", fecha)
+        .or_(f"vigente_hasta.is.null,vigente_hasta.gte.{fecha}")
+        .order("vigente_desde", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    tasa_data = tasa_resp.data or []
+    if tasa_data:
+        tasa_afp = float(tasa_data[0]["tasa_cotizacion"])
+        tasa_sis = float(tasa_data[0]["tasa_sis"])
+    else:
+        tasa_afp = 0.0
+        tasa_sis = 0.0
+
+    tasa_total = tasa_afp + tasa_sis
+
+    return {
+        "afp_tasa": tasa_afp,
+        "tasa_txt": f"{tasa_afp * 100:.2f}%",
+        "afp_nombre": afp_nombre,
+        "sis_tasa": tasa_sis,
+        "sis_txt": f"{tasa_sis * 100:.2f}%",
+        "tasa_total": tasa_total,
+        "tasa_total_txt": f"{tasa_total * 100:.2f}%"
+    }
+
+
 def obtener_sistemas_salud():
     """
     Devuelve sistemas de salud (id, nombre, tipo).
@@ -149,23 +260,62 @@ def obtener_sistemas_salud():
         return []
 
 
-def _obtener_tasa_afp(afp_id, fecha: date):
-    """
-    Llama a la función SQL obtener_tasa_afp.
-    Devuelve dict con keys: tasa, seguro_invalidez (o None).
-    """
-    if not afp_id:
-        return None
+def obtener_salud_trabajador(trabajador: dict, fecha: date) -> dict:
+    salud_id = trabajador.get("salud_id")
+    if not salud_id:
+        return {
+            "salud_nombre": "-",
+            "salud_tipo": None,
+            "salud_tasa": 0.0,
+            "salud_plan": None,
+            "tasa_txt": "0%"
+        }
+
     try:
-        resp = supabase.rpc(
-            "obtener_tasa_afp",
-            {"p_afp_id": afp_id, "p_fecha": fecha.isoformat()},
-        ).execute()
-        data = resp.data or []
-        return data[0] if data else None
+        # 1️⃣ Obtener sistema de salud (nombre + tipo)
+        resp = (
+            supabase.table("sistema_salud")
+            .select("id,nombre,tipo")
+            .eq("id", salud_id)
+            .single()
+            .execute()
+        )
+        sistema = resp.data or {}
     except Exception as e:
-        print("Error _obtener_tasa_afp:", e)
-        return None
+        print("Error sistema_salud:", e)
+        sistema = {}
+
+    nombre = sistema.get("nombre", "-")
+    tipo = sistema.get("tipo")
+
+    try:
+        # 2️⃣ Obtener tasa vigente
+        resp = (
+            supabase.table("sistema_salud_tasa")
+            .select("porcentaje_base,plan_fijo_monto")
+            .eq("sistema_salud_id", salud_id)
+            .lte("vigente_desde", fecha.isoformat())
+            .or_(f"vigente_hasta.is.null,vigente_hasta.gte.{fecha.isoformat()}")
+            .order("vigente_desde", desc=True)
+            .limit(1)
+            .execute()
+        )
+        data = resp.data or []
+        tasa = data[0] if data else {}
+    except Exception as e:
+        print("Error sistema_salud_tasa:", e)
+        tasa = {}
+
+    porcentaje = float(tasa.get("porcentaje_base") or 0.0)
+    plan = tasa.get("plan_fijo_monto")
+
+    return {
+        "salud_nombre": nombre,
+        "salud_tipo": tipo,
+        "salud_tasa": porcentaje,
+        "salud_plan": float(plan) if plan is not None else None,
+        "tasa_txt": f"{porcentaje * 100:.2f}%"
+    }
 
 
 def _obtener_tasa_salud(salud_id, fecha: date):
@@ -253,6 +403,59 @@ def obtener_conceptos_agrupados():
             "descuento_previsional": [],
             "descuento_otro": [],
         }
+
+
+
+# --- Normalización y consolidación de conceptos ---
+def _normalizar_y_consolidar_montos(montos_input: dict[str, float], por_codigo: dict[str, dict]) -> dict[str, float]:
+    """
+    Recibe montos_input con claves que pueden ser labels ('GRATIFICACION') o códigos del catálogo,
+    normaliza a códigos existentes del catálogo (por_codigo) y consolida duplicados por grupo.
+    """
+    SINONIMOS_A_CODIGO = {
+        "GRATIFICACION":    "GRAT_LEGAL",   # ← AJUSTA al código real del catálogo
+        "FONDO_PENSIONES":  "DESC_AFP",     # ← AJUSTA: p.ej., 'AFP' o 'DESC_AFP'
+        "SALUD":            "DESC_SALUD",   # ← AJUSTA
+        "ADICIONAL_ISAPRE": "ADICIONAL_ISAPRE",
+        "RETROACTIVO":      "RETROACTIVO",
+    }
+
+    GRUPO_EXCLUYENTE = "GRATIFICACION"  # ← AJUSTA al nombre del grupo exacto en tu tabla 'concepto'
+
+    normalizados: dict[str, float] = {}
+
+    for clave, monto in (montos_input or {}).items():
+        try:
+            valor = round(float(monto), 0)
+        except (TypeError, ValueError):
+            print(f"[WARN] Monto inválido para {clave}: {monto}")
+            continue
+
+        if abs(valor) < 0.5:
+            continue
+
+        code = SINONIMOS_A_CODIGO.get(clave, clave)
+        concepto = por_codigo.get(code)
+        if not concepto:
+            print(f"[WARN] Código de concepto no encontrado en catálogo: {clave} → {code}")
+            continue
+
+        grupo = concepto.get("grupo")
+
+        # Consolidación: si el grupo es excluyente (gratificación), deja una sola (prioriza la legal)
+        if grupo == GRUPO_EXCLUYENTE:
+            codigos_existentes = [c for c in normalizados.keys() if por_codigo[c].get("grupo") == GRUPO_EXCLUYENTE]
+            if codigos_existentes and code != "GRAT_LEGAL":
+                print(f"[INFO] Ignorando {code} porque ya existe otro del grupo {GRUPO_EXCLUYENTE}")
+                continue
+            # Si llega 'GRAT_LEGAL' y ya hay otra, reemplazar
+            if code == "GRAT_LEGAL":
+                for cprev in codigos_existentes:
+                    normalizados.pop(cprev, None)
+
+        normalizados[code] = round(float(normalizados.get(code, 0)) + float(valor), 0)
+
+    return normalizados
 
 
 def _obtener_catalogo_conceptos():
@@ -361,253 +564,172 @@ def eliminar_liquidacion(liq_id: str):
 #  LIQUIDACIONES - LÓGICA AUTOMÁTICA
 # ====================================================
 
-def _recalcular_montos_automaticos(trabajador: dict, periodo: str, montos_por_concepto: dict):
-    """
-    Recibe:
-      trabajador: fila completa de 'trabajador'
-      periodo: string 'YYYY-MM'
-      montos_por_concepto: { concepto_id: monto (float) } (viene del GUI)
+# def _recalcular_montos_automaticos(trabajador: dict, periodo: str, montos_por_concepto: dict):
+#     """
+#     Recibe:
+#       trabajador: fila completa de 'trabajador'
+#       periodo: string 'YYYY-MM'
+#       montos_por_concepto: { concepto_id: monto (float) } (viene del GUI)
 
-    Devuelve un nuevo dict { concepto_id: monto_final } aplicando:
-      - GRATIFICACION = 25% SUELDO BASE (si está en 0)
-      - ASIGNACION_FAMILIAR = función SQL según base imponible y cargas
-      - FONDO_PENSIONES = tasa_afp * base_imponible
-      - 7% Previsión = porcentaje_salud * base_imponible
-    """
-    if not trabajador:
-        return montos_por_concepto
+#     Devuelve un nuevo dict { concepto_id: monto_final } aplicando:
+#       - GRATIFICACION = 25% SUELDO BASE (si está en 0)
+#       - ASIGNACION_FAMILIAR = función SQL según base imponible y cargas
+#       - FONDO_PENSIONES = tasa_afp * base_imponible
+#       - 7% Previsión = porcentaje_salud * base_imponible
+#     """
+#     if not trabajador:
+#         return montos_por_concepto
 
-    periodo_date = _parse_periodo_to_date(periodo)
-    por_id, por_codigo = _obtener_catalogo_conceptos()
+#     periodo_date = _parse_periodo_to_date(periodo)
+#     por_id, por_codigo = _obtener_catalogo_conceptos()
 
-    # Copiamos montos originales para no mutar el dict que viene del GUI
-    final_montos = {cid: float(m or 0) for cid, m in montos_por_concepto.items()}
+#     # Copiamos montos originales para no mutar el dict que viene del GUI
+#     final_montos = {cid: float(m or 0) for cid, m in montos_por_concepto.items()}
 
-    # ---- Obtener IDs de conceptos especiales por código
-    c_sueldo = por_codigo.get("SUELDO_BASE")
-    c_grat = por_codigo.get("GRATIFICACION")
-    c_asig_fam = por_codigo.get("ASIGNACION_FAMILIAR")
-    c_fondo_pen = por_codigo.get("FONDO_PENSIONES")
-    c_prev_7 = por_codigo.get("PREVISION_7")
+#     # ---- Obtener IDs de conceptos especiales por código
+#     c_sueldo = por_codigo.get("SUELDO_BASE")
+#     c_grat = por_codigo.get("GRATIFICACION")
+#     c_asig_fam = por_codigo.get("ASIGNACION_FAMILIAR")
+#     c_fondo_pen = por_codigo.get("FONDO_PENSIONES")
+#     c_prev_7 = por_codigo.get("PREVISION_7")
 
-    # ---- SUELDO BASE desde los montos
-    sueldo_base = 0.0
-    if c_sueldo and c_sueldo["id"] in final_montos:
-        sueldo_base = final_montos[c_sueldo["id"]]
+#     # ---- SUELDO BASE desde los montos
+#     sueldo_base = 0.0
+#     if c_sueldo and c_sueldo["id"] in final_montos:
+#         sueldo_base = final_montos[c_sueldo["id"]]
 
-    # ---- GRATIFICACION (auto si está en 0)
-    if c_grat and c_grat["id"] in final_montos and c_grat.get("es_automatico"):
-        if final_montos[c_grat["id"]] == 0 and sueldo_base > 0:
-            final_montos[c_grat["id"]] = round(sueldo_base * 0.25)
+#     # ---- GRATIFICACION (auto si está en 0)
+#     if c_grat and c_grat["id"] in final_montos and c_grat.get("es_automatico"):
+#         if final_montos[c_grat["id"]] == 0 and sueldo_base > 0:
+#             final_montos[c_grat["id"]] = round(sueldo_base * 0.25)
 
-    # ---- Base imponible provisional (para asignación familiar, AFP, etc.)
-    base_imponible = 0.0
-    for cid, monto in final_montos.items():
-        info = por_id.get(cid)
-        if info and info.get("grupo") == "haber_imponible":
-            base_imponible += float(monto or 0)
+#     # ---- Base imponible provisional (para asignación familiar, AFP, etc.)
+#     base_imponible = 0.0
+#     for cid, monto in final_montos.items():
+#         info = por_id.get(cid)
+#         if info and info.get("grupo") == "haber_imponible":
+#             base_imponible += float(monto or 0)
 
-    # ---- ASIGNACION FAMILIAR (auto si está en 0)
-    cargas = int(trabajador.get("cargas_familiares") or 0)
-    if c_asig_fam and c_asig_fam["id"] in final_montos and c_asig_fam.get("es_automatico"):
-        if final_montos[c_asig_fam["id"]] == 0 and base_imponible > 0 and cargas > 0:
-            final_montos[c_asig_fam["id"]] = round(
-                _calcular_asignacion_familiar(base_imponible, cargas)
-            )
+#     # ---- ASIGNACION FAMILIAR (auto si está en 0)
+#     cargas = int(trabajador.get("cargas_familiares") or 0)
+#     if c_asig_fam and c_asig_fam["id"] in final_montos and c_asig_fam.get("es_automatico"):
+#         if final_montos[c_asig_fam["id"]] == 0 and base_imponible > 0 and cargas > 0:
+#             final_montos[c_asig_fam["id"]] = round(
+#                 _calcular_asignacion_familiar(base_imponible, cargas)
+#             )
 
-    # ---- AFP y salud
-    afp_id = trabajador.get("afp_id")
-    salud_id = trabajador.get("sistema_salud_id")
+#     # ---- AFP y salud
+#     salud_id = trabajador.get("sistema_salud_id")
 
-    tasa_afp = 0.0
-    datos_afp = _obtener_tasa_afp(afp_id, periodo_date) if afp_id else None
-    if datos_afp and datos_afp.get("tasa") is not None:
-        try:
-            tasa_afp = float(datos_afp["tasa"])  # ej: 0.1144
-        except Exception:
-            tasa_afp = 0.0
+#     # Porcentaje salud: priorizamos porcentaje de trabajador (7.0 -> 0.07)
+#     porc_salud_trab = trabajador.get("porcentaje_salud")
+#     if porc_salud_trab is not None:
+#         try:
+#             tasa_salud = float(porc_salud_trab) / 100.0
+#         except Exception:
+#             tasa_salud = 0.07
+#     else:
+#         # fallback a tasa en sistema_salud_tasa
+#         datos_salud = _obtener_tasa_salud(salud_id, periodo_date) if salud_id else None
+#         if datos_salud and datos_salud.get("porcentaje") is not None:
+#             try:
+#                 tasa_salud = float(datos_salud["porcentaje"])
+#             except Exception:
+#                 tasa_salud = 0.07
+#         else:
+#             tasa_salud = 0.07  # default 7%
 
-    # Porcentaje salud: priorizamos porcentaje de trabajador (7.0 -> 0.07)
-    porc_salud_trab = trabajador.get("porcentaje_salud")
-    if porc_salud_trab is not None:
-        try:
-            tasa_salud = float(porc_salud_trab) / 100.0
-        except Exception:
-            tasa_salud = 0.07
-    else:
-        # fallback a tasa en sistema_salud_tasa
-        datos_salud = _obtener_tasa_salud(salud_id, periodo_date) if salud_id else None
-        if datos_salud and datos_salud.get("porcentaje") is not None:
-            try:
-                tasa_salud = float(datos_salud["porcentaje"])
-            except Exception:
-                tasa_salud = 0.07
-        else:
-            tasa_salud = 0.07  # default 7%
+#     # ---- FONDO DE PENSIONES (auto si está en 0)
+#     if c_fondo_pen and c_fondo_pen["id"] in final_montos and c_fondo_pen.get("es_automatico"):
+#         if final_montos[c_fondo_pen["id"]] == 0 and base_imponible > 0 and tasa_afp > 0:
+#             final_montos[c_fondo_pen["id"]] = round(base_imponible * tasa_afp)
 
-    # ---- FONDO DE PENSIONES (auto si está en 0)
-    if c_fondo_pen and c_fondo_pen["id"] in final_montos and c_fondo_pen.get("es_automatico"):
-        if final_montos[c_fondo_pen["id"]] == 0 and base_imponible > 0 and tasa_afp > 0:
-            final_montos[c_fondo_pen["id"]] = round(base_imponible * tasa_afp)
+#     # ---- 7% Previsión (auto si está en 0)
+#     if c_prev_7 and c_prev_7["id"] in final_montos and c_prev_7.get("es_automatico"):
+#         if final_montos[c_prev_7["id"]] == 0 and base_imponible > 0 and tasa_salud > 0:
+#             final_montos[c_prev_7["id"]] = round(base_imponible * tasa_salud)
 
-    # ---- 7% Previsión (auto si está en 0)
-    if c_prev_7 and c_prev_7["id"] in final_montos and c_prev_7.get("es_automatico"):
-        if final_montos[c_prev_7["id"]] == 0 and base_imponible > 0 and tasa_salud > 0:
-            final_montos[c_prev_7["id"]] = round(base_imponible * tasa_salud)
-
-    return final_montos
+#     return final_montos
 
 
 # ====================================================
 #  LIQUIDACIONES - CREAR / ACTUALIZAR
 # ====================================================
 
+
+
+
+
+
+
+from datetime import date
+from typing import Dict, Optional, List, Any
+
 def crear_liquidacion(
     trabajador_rut: str,
     periodo: str,
-    datos_cabecera: dict,
-    montos_por_concepto: dict,
-):
-    """
-    Crea una liquidación completa:
-      - Inserta cabecera en 'liquidacion'
-      - Inserta detalles en 'liquidacion_detalle'
-      - Llama a calcular_totales_liquidacion en la BD
+    datos_cabecera: Dict,
+    montos_por_concepto: List[Dict[str, Any]],
+    *,
+    ejecutar_rpc: bool = True,
+) -> Optional[str]:
 
-    montos_por_concepto: { concepto_id: monto_float } (viene del GUI)
-    """
     try:
         trabajador = obtener_trabajador(trabajador_rut)
         if not trabajador:
-            raise ValueError(f"Trabajador {trabajador_rut} no encontrado.")
+            raise ValueError("Trabajador no encontrado")
 
-        periodo_date = _parse_periodo_to_date(periodo)
+        cab = dict(datos_cabecera or {})
 
-        # AFP / Salud snapshot
-        afp_id = trabajador.get("afp_id")
-        salud_id = trabajador.get("sistema_salud_id")
-
-        # Nombre AFP
-        afp_nombre = None
-        if afp_id:
-            resp_afp = (
-                supabase.table("afp")
-                .select("nombre")
-                .eq("id", afp_id)
-                .execute()
-            )
-            if resp_afp.data:
-                afp_nombre = resp_afp.data[0].get("nombre")
-
-        # Nombre sistema salud
-        salud_nombre = None
-        if salud_id:
-            resp_salud = (
-                supabase.table("sistema_salud")
-                .select("nombre")
-                .eq("id", salud_id)
-                .execute()
-            )
-            if resp_salud.data:
-                salud_nombre = resp_salud.data[0].get("nombre")
-
-        # Tasa AFP
-        datos_afp = _obtener_tasa_afp(afp_id, periodo_date) if afp_id else None
-        tasa_afp = None
-        if datos_afp and datos_afp.get("tasa") is not None:
-            try:
-                tasa_afp = float(datos_afp["tasa"])
-            except Exception:
-                tasa_afp = None
-
-        # Porcentaje salud decimal en liquidación
-        porc_salud_trab = trabajador.get("porcentaje_salud")
-        if porc_salud_trab is not None:
-            try:
-                porcentaje_salud_liq = float(porc_salud_trab) / 100.0
-            except Exception:
-                porcentaje_salud_liq = 0.07
-        else:
-            datos_salud = _obtener_tasa_salud(salud_id, periodo_date) if salud_id else None
-            if datos_salud and datos_salud.get("porcentaje") is not None:
-                try:
-                    porcentaje_salud_liq = float(datos_salud["porcentaje"])
-                except Exception:
-                    porcentaje_salud_liq = 0.07
-            else:
-                porcentaje_salud_liq = 0.07
-
-        # Recalcular automáticos
-        montos_finales = _recalcular_montos_automaticos(
-            trabajador, periodo, montos_por_concepto
-        )
-
-        # Base imponible (solo haberes imponibles)
-        por_id, _ = _obtener_catalogo_conceptos()
-        base_imponible = 0.0
-        for cid, monto in montos_finales.items():
-            info = por_id.get(cid)
-            if info and info.get("grupo") == "haber_imponible":
-                base_imponible += float(monto or 0)
-
-        # Cabecera a insertar
         liq_data = {
             "trabajador_rut": trabajador_rut,
             "periodo": periodo,
             "fecha_emision": date.today().isoformat(),
-            "dias_trabajados": int(datos_cabecera.get("dias_trabajados", 30)),
-            "numero_horas_extras": int(datos_cabecera.get("numero_horas_extras", 0)),
-            "base_imponible": base_imponible,
-            "base_tributable": base_imponible,
-            "afp_id": afp_id,
-            "afp_nombre": afp_nombre,
-            "afp_tasa": tasa_afp,
-            "sistema_salud_id": salud_id,
-            "sistema_salud_nombre": salud_nombre,
-            "porcentaje_salud": porcentaje_salud_liq,
-            "retro_antiguo": datos_cabecera.get("retro_antiguo"),
-            "retro_actual": datos_cabecera.get("retro_actual"),
-            "retro_diferencia": datos_cabecera.get("retro_diferencia"),
-            "observaciones": datos_cabecera.get("observaciones"),
+            **cab,
         }
 
-        # Insertar cabecera
-        resp_liq = supabase.table("liquidacion").insert(liq_data).execute()
-        if not resp_liq.data:
-            print("Error: no se insertó cabecera de liquidación.")
+        # 2) INSERT cabecera
+        resp = supabase.table("liquidacion").insert(liq_data).execute()
+        if not resp.data:
             return None
+        liq_id = resp.data[0]["id"]
 
-        liq_id = resp_liq.data[0]["id"]
-
-        # Detalles
-        detalles = []
-        for cid, monto in montos_finales.items():
-            monto = float(monto or 0)
-            if abs(monto) < 0.5:
-                continue  # evitamos insertar ceros
-            detalles.append(
-                {
+        # 3) INSERT detalle (ya viene en lista con concepto_id)
+        if montos_por_concepto:
+            detalles = []
+            for d in montos_por_concepto:
+                detalles.append({
                     "liquidacion_id": liq_id,
-                    "concepto_id": cid,
-                    "monto": monto,
-                }
-            )
+                    "concepto_id": d["concepto_id"],
+                    "monto": round(float(d["monto"]), 2),
+                })
 
-        if detalles:
             supabase.table("liquidacion_detalle").insert(detalles).execute()
 
-        # Recalcular totales en la BD
-        supabase.rpc(
-            "calcular_totales_liquidacion",
-            {"p_liquidacion_id": liq_id},
-        ).execute()
+        # 4) RPC
+        if ejecutar_rpc:
+            supabase.rpc("calcular_totales_liquidacion", {"p_liquidacion_id": liq_id}).execute()
 
-        print("Liquidación creada:", liq_id)
         return liq_id
 
     except Exception as e:
         print("Error crear_liquidacion:", e)
         return None
+
+
+def obtener_nombre_salud(salud_id):
+    if not salud_id:
+        return "-"
+    resp = (
+        supabase.table("sistema_salud")
+        .select("nombre")
+        .eq("id", salud_id)
+        .single()
+        .execute()
+    )
+    return resp.data["nombre"] if resp.data else "-"
+
+
 
 
 def actualizar_liquidacion(
@@ -623,6 +745,13 @@ def actualizar_liquidacion(
       - Llama a calcular_totales_liquidacion
     """
     try:
+
+        if isinstance(montos_por_concepto, list):
+            montos_por_concepto = {
+                d["concepto_id"]: d["monto"]
+                for d in montos_por_concepto
+                if "concepto_id" in d
+            }
         # Obtener cabecera actual para saber trabajador y periodo
         liq_resp = (
             supabase.table("liquidacion")
@@ -643,10 +772,7 @@ def actualizar_liquidacion(
             raise ValueError(f"Trabajador {trabajador_rut} no encontrado.")
 
         # Recalcular automáticos
-        montos_finales = _recalcular_montos_automaticos(
-            trabajador, periodo, montos_por_concepto
-        )
-
+        montos_finales = montos_por_concepto
         # Base imponible
         por_id, _ = _obtener_catalogo_conceptos()
         base_imponible = 0.0
@@ -705,3 +831,6 @@ def actualizar_liquidacion(
     except Exception as e:
         print("Error actualizar_liquidacion:", e)
         return False
+
+
+
