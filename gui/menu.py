@@ -28,9 +28,9 @@ class MenuWindow(QWidget):
         # Conexiones
         self.btn_ventas.clicked.connect(lambda: self.open_main(0))
         self.btn_arriendos.clicked.connect(lambda: self.open_main(1))
-        self.btn_rrhh.clicked.connect(lambda: self.open_main(3))
-        self.btn_finanzas.clicked.connect(lambda: self.open_main(4))
-        self.btn_gest_usuarios.clicked.connect(lambda: self.open_main(5))
+        self.btn_rrhh.clicked.connect(lambda: self.open_main(2))
+        self.btn_finanzas.clicked.connect(lambda: self.open_main(3))
+        self.btn_gest_usuarios.clicked.connect(lambda: self.open_main(4))
 
 
         if rol == "usuario":

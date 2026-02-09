@@ -265,6 +265,8 @@ class TabTrabajadores(QWidget):
         ])
         layout.addWidget(self.tabla)
 
+        self.tabla.verticalHeader().setVisible(False)
+
         # -----------------------------
         # 3. BOTONES (ABAJO)
         # -----------------------------
@@ -1456,6 +1458,7 @@ class TabLiquidaciones(QWidget):
 
         layout.addLayout(filtros_layout)
 
+
         # -----------------------------
         # 2. TABLA (CENTRO)
         # -----------------------------
@@ -1466,6 +1469,8 @@ class TabLiquidaciones(QWidget):
             "Total Descuentos", "Líquido a Pagar",
         ])
         layout.addWidget(self.tabla)
+
+        self.tabla.verticalHeader().setVisible(False)
 
         header = self.tabla.horizontalHeader()
 

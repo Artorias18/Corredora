@@ -470,6 +470,7 @@ class DashboardArriendos(QWidget):
         btn_abonos = DoubleClickButton("Agregar abonos")
         btn_gastos = DoubleClickButton("Agregar gastos")
 
+        btn_abonos.setEnabled(False)
         btn_gastos.setEnabled(False)
 
         btn_abonos.doubleClicked.connect(self.abrir_abonos_arriendo)

@@ -1,116 +1,309 @@
-/* === THEME GLOBAL PARA CORREDORA === */
-
 /* ==========================================================
-   TEMA GLOBAL OSCURO - SOFTWARE CORREDORA
-   Elegante, corporativo, sobrio
+   TEMA CLARO REFINADO - CORREDORA DE PROPIEDADES
+
    ========================================================== */
 
-/* ----- COLOR BASE ----- */
+/* ----- BASE ----- */
 QWidget {
-    background-color: #1E1E1E;
-    color: #E0E0E0;
+    background-color: #F5F5F5;
+    color: #2E2E2E;
     font-family: "Segoe UI", Roboto, sans-serif;
     font-size: 14px;
 }
 
-/* ----- LABELS ----- */
-QLabel {
-    color: #E0E0E0;
+/* ----- TÍTULOS ----- */
+QLabel#Title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #2E2E2E;
+    letter-spacing: -0.3px;
+    margin-bottom: 5px;
+}
+
+QLabel#Subtitle {
+    font-size: 16px;
+    color: #6B6B6B;
+    font-weight: 400;
+    margin-bottom: 15px;
+}
+
+
+
+/* ----- TARJETAS ----- */
+QFrame#Card {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 5px;
+    /* Alternativa a box-shadow: borde más oscuro en la parte inferior */
+    border-bottom: 2px solid #D0D0D0;
+}
+
+/* TARJETA CON MÁS PROFUNDIDAD (alternativa) */
+QFrame#CardShadow {
+    background-color: #FFFFFF;
+    border: 1px solid #C0C0C0; /* Borde más marcado */
+    border-radius: 8px;
+    padding: 15px;
+    margin: 5px;
+}
+
+/* ----- ENTRADAS ----- */
+QLineEdit, QComboBox, QDateEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D0D0D0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    color: #333333;
+    font-size: 14px;
+    min-height: 28px;
+}
+
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus {
+    border: 2px solid #8B2E2E; /* Más grueso para destacar */
+    background-color: #FFF9F9;
 }
 
 /* ----- BOTONES ----- */
 QPushButton {
-    background-color: #2A2A2A;
-    border: 1px solid #3A3A3A;
+    background-color: #8B2E2E;
+    color: white;
+    border: none;
     border-radius: 6px;
-    padding: 6px 12px;
-    color: #E0E0E0;
-}
-QPushButton:hover {
-    background-color: #00ACC1;
-    border-color: #00ACC1;
-}
-QPushButton:pressed {
-    background-color: #007F8A;
+    padding: 8px 16px;
+    font-weight: 500;
+    font-size: 14px;
+    min-height: 32px;
+    min-width: 80px;
 }
 
-/* ----- CAMPOS DE TEXTO ----- */
-QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox, QTextEdit {
-    background-color: #2A2A2A;
-    border: 1px solid #3A3A3A;
-    border-radius: 4px;
-    padding: 4px;
-    color: #E0E0E0;
+QPushButton:hover {
+    background-color: #9A3A3A;
 }
-QLineEdit:focus, QComboBox:focus, QTextEdit:focus {
-    border: 1px solid #0097A7;
+
+QPushButton:pressed {
+    background-color: #7A2222;
+}
+
+/* ----- ESTADO DESHABILITADO ----- */
+QPushButton:disabled {
+    background-color: #CCCCCC;  /* Gris claro */
+    color: #888888;             /* Gris oscuro */
+    border: 1px solid #DDDDDD;  /* Borde gris */
+}
+
+/* Opcional: si quieres que los botones secundarios deshabilitados sean diferentes */
+QPushButton.secondary:disabled {
+    background-color: #F0F0F0;
+    color: #AAAAAA;
+    border: 1px solid #DDDDDD;
+}
+
+/* Botón WhatsApp deshabilitado */
+QPushButton.whatsapp:disabled {
+    background-color: #C8E6C9;  /* Verde muy claro */
+    color: #888888;
+    border: 1px solid #DDDDDD;
 }
 
 /* ----- TABLAS ----- */
-QTableWidget, QTableView {
-    background-color: #2A2A2A;
-    gridline-color: #3A3A3A;
-    border: 1px solid #3A3A3A;
+QTableView, QTableWidget {
+    background-color: #FFFFFF;
+    border: 2px solid #E0E0E0; /* Borde más grueso para profundidad */
+    border-radius: 6px;
+    gridline-color: #F0F0F0;
+    alternate-background-color: #F9F9F9;
 }
 
 QHeaderView::section {
-    background-color: #1E1E1E;
-    color: #E0E0E0;
-    border: 1px solid #3A3A3A;
-    padding: 4px;
+    background-color: #F8F8F8;
+    border: none;
+    border-bottom: 3px solid #8B2E2E; /* Más grueso para efecto 3D */
+    border-right: 1px solid #E8E8E8;
+    font-weight: 600;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: #555555;
+    
+    
 }
 
-/* ----- TABS ----- */
+
+
+
+/* ----- PESTAÑAS CON EFECTO 3D ----- */
 QTabWidget::pane {
-    border: 1px solid #3A3A3A;
-    background: #1E1E1E;
+    border: 2px solid #E0E0E0;
+    border-radius: 6px;
+    background-color: #FFFFFF;
+    padding: 5px;
+    margin-top: -1px;
 }
 
 QTabBar::tab {
-    background: #2A2A2A;
-    color: #E0E0E0;
-    padding: 6px 12px;
+    background-color: #F0F0F0;
+    color: #666666;
+    padding: 8px 16px;
     margin-right: 2px;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
+    border: 1px solid #E0E0E0;
+    border-bottom: none;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    font-weight: 500;
 }
 
 QTabBar::tab:selected {
-    background: #0097A7;
-    color: white;
+    background-color: #FFFFFF;
+    color: #8B2E2E;
+    border: 2px solid #E0E0E0;
+    border-bottom: 3px solid #8B2E2E; /* Conecta con el panel */
+    font-weight: 600;
 }
 
-QTabBar::tab:hover {
-    background: #00ACC1;
+/* ----- GRUPOS DE FORMULARIO CON RELIEVE ----- */
+QGroupBox {
+    background-color: #FFFFFF;
+    border: 2px solid #DDDDDD;
+    border-radius: 6px;
+    margin-top: 10px;
+    padding-top: 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8B2E2E;
 }
 
-/* ----- SCROLLBARS ----- */
-QScrollBar:vertical, QScrollBar:horizontal {
-    background: #1E1E1E;
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px;
+    background-color: #FFFFFF;
+}
+
+/* ----- BARRA DE BÚSQUEDA CON ÍCONO ----- */
+QLineEdit.search {
+    background-color: #FFFFFF;
+    border: 2px solid #D0D0D0;
+    border-radius: 4px;
+    padding: 6px 10px 6px 30px;
+    font-size: 14px;
+    background-position: 8px center;
+    background-repeat: no-repeat;
+}
+
+QLineEdit.search:focus {
+    border: 2px solid #8B2E2E;
+}
+
+/* ----- EFECTOS DE ELEVACIÓN (alternativas a shadow) ----- */
+
+/* Efecto de tarjeta elevada */
+.card-elevated {
+    border: 1px solid #B0B0B0;
+    border-top: 1px solid #FFFFFF;
+    border-left: 1px solid #FFFFFF;
+    background-color: #FFFFFF;
+}
+
+/* Efecto de botón elevado */
+.btn-elevated {
+    border: 1px solid #7A2222;
+    border-top: 1px solid #A63A3A;
+    border-left: 1px solid #A63A3A;
+}
+
+
+/* Efecto de input con profundidad */
+.input-depth {
+    border: 1px solid #C0C0C0;
+    border-bottom: 2px solid #A0A0A0;
+}
+
+
+/* ----- MENSAJES DE ALERTA CON DESTAQUE ----- */
+.alert-success {
+    background-color: #E8F5E9;
+    border: 2px solid #C8E6C9;
+    border-left: 5px solid #2E7D32; /* Borde izquierdo grueso */
+    border-radius: 4px;
+    color: #2E7D32;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.alert-error {
+    background-color: #FFEBEE;
+    border: 2px solid #FFCDD2;
+    border-left: 5px solid #C62828;
+    border-radius: 4px;
+    color: #C62828;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+/* ----- SEPARADORES ----- */
+.line-horizontal {
+    background-color: #E0E0E0;
+    max-height: 2px; /* Más grueso */
+    min-height: 2px;
+    margin: 15px 0;
+}
+
+/* ----- EFECTO DE BOTÓN ACTIVO ----- */
+QPushButton:checked {
+    background-color: #7A2222;
+    border: 1px solid #5A1212;
+    font-weight: 600;
+}
+
+/* ----- TOOLBAR CON RELIEVE ----- */
+QToolBar {
+    background-color: #F0F0F0;
+    border-bottom: 3px solid #E0E0E0;
+    padding: 5px;
+    spacing: 5px;
+}
+
+/* ----- SCROLLBAR CON PROFUNDIDAD ----- */
+QScrollBar:vertical {
+    background-color: #F0F0F0;
+    border: 1px solid #D0D0D0;
     width: 12px;
-    margin: 0px;
+    border-radius: 6px;
 }
 
-QScrollBar::handle {
-    background: #3A3A3A;
+QScrollBar::handle:vertical {
+    background-color: #C0C0C0;
+    border: 1px solid #A0A0A0;
+    border-radius: 6px;
     min-height: 20px;
 }
 
-QScrollBar::handle:hover {
-    background: #4A4A4A;
+/* ----- BADGE CON EFECTO 3D ----- */
+.badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    border-left: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-QScrollBar::add-line, QScrollBar::sub-line {
-    background: none;
-    border: none;
+.badge-success {
+    background-color: #4CAF50;
+    color: white;
 }
 
-/* ----- QDialog ----- */
-QDialog {
-    background-color: #1E1E1E;
+.badge-warning {
+    background-color: #FF9800;
+    color: white;
 }
 
-/* ----- MESSAGE BOX ----- */
-QMessageBox {
-    background-color: #1E1E1E;
+.badge-danger {
+    background-color: #F44336;
+    color: white;
 }
+
+
+

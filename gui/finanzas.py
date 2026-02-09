@@ -22,13 +22,6 @@ class DashboardFinanzas(QWidget):
         container = QFrame()
         container.setFrameShape(QFrame.StyledPanel)
         container.setFrameShadow(QFrame.Raised)
-        container.setStyleSheet("""
-            QFrame {
-                background-color: #2B2B2B;   /* fondo oscuro */
-                border: 1px solid #444;
-                border-radius: 10px;
-            }
-        """)
 
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(25, 25, 25, 25)

@@ -55,6 +55,7 @@ class DashboardUsuarios(QWidget):
         self.tabla = QTableWidget(0, 4, self)
         self.tabla.setHorizontalHeaderLabels(["ID", "Email", "Nombre", "Rol"])
         self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabla.verticalHeader().setVisible(False)
         vbox.addWidget(self.tabla)
 
         # botones
