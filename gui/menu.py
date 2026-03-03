@@ -13,12 +13,14 @@ class MenuWindow(QWidget):
 
         self.btn_ventas = QPushButton("Ventas")
         self.btn_arriendos = QPushButton("Arriendos")
+        self.btn_eva_arrendatario = QPushButton("Evaluaciones arrendatarios")
         self.btn_rrhh = QPushButton("RRHH")
         self.btn_finanzas = QPushButton("Finanzas")
         self.btn_gest_usuarios = QPushButton("Gestión de usuarios")
 
         layout.addWidget(self.btn_ventas)
         layout.addWidget(self.btn_arriendos)
+        layout.addWidget(self.btn_eva_arrendatario)
         layout.addWidget(self.btn_rrhh)
         layout.addWidget(self.btn_finanzas)
         layout.addWidget(self.btn_gest_usuarios)
@@ -28,9 +30,10 @@ class MenuWindow(QWidget):
         # Conexiones
         self.btn_ventas.clicked.connect(lambda: self.open_main(0))
         self.btn_arriendos.clicked.connect(lambda: self.open_main(1))
-        self.btn_rrhh.clicked.connect(lambda: self.open_main(2))
-        self.btn_finanzas.clicked.connect(lambda: self.open_main(3))
-        self.btn_gest_usuarios.clicked.connect(lambda: self.open_main(4))
+        self.btn_eva_arrendatario.clicked.connect(lambda: self.open_main(2))
+        self.btn_rrhh.clicked.connect(lambda: self.open_main(3))
+        self.btn_finanzas.clicked.connect(lambda: self.open_main(4))
+        self.btn_gest_usuarios.clicked.connect(lambda: self.open_main(5))
 
 
         if rol == "usuario":

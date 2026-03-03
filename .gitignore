@@ -12,3 +12,9 @@ __pycache__/
 
 secret.key
 session.dat
+
+# Builds / ejecutables
+dist/
+build/
+*.exe
+*.pkg

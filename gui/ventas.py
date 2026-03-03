@@ -169,7 +169,7 @@ class DetalleVentaWindow(QWidget):
             ("Monto", (f"${int(venta.get('monto_venta', 0)):,}".replace(",", ".") if venta.get('monto_venta') else "No especificado")),
             ("Tipo de venta", venta.get('tipo_venta')),
             ("Estado", venta.get('estado_venta', '').replace("_", " ").capitalize()),
-            ("Propiedad ofrecida", venta.get('propiedad_ofrecida')),
+            ("Propiedad subida", venta.get('propiedad_ofrecida')),
             ("Regularizaciones", venta.get('regularizaciones')),
             ("Observaciones", venta.get('observaciones'))
         ]

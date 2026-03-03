@@ -58,6 +58,17 @@ class DashboardUsuarios(QWidget):
         self.tabla.verticalHeader().setVisible(False)
         vbox.addWidget(self.tabla)
 
+        self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabla.setSelectionMode(QTableWidget.SingleSelection)
+
+        self.tabla.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #D5D8DC;
+                color: black;
+            }
+        """)
+
+
         # botones
         hbox = QHBoxLayout()
         self.btn_nuevo   = DoubleClickButton("Nuevo")

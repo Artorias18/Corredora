@@ -28,16 +28,22 @@ def obtener_arriendos_resumen(filtro_estado = None):
         return []
     
 
+def safe_numeric(value):
+    if value in (None, "", " "):
+        return 0
+    try:
+        return float(value)
+    except:
+        return 0
+
+    
+
 def guardar_arriendo(data_arriendo):
 
     try:
         
         if not data_arriendo.get('propiedad',{}).get('codigo'):
             raise ValueError("El código de la propiedad es obligatorio")
-        if not data_arriendo.get('arrendador', {}).get('rut'):
-                raise ValueError("El RUT del arrendador es obligatorio para ventas cerradas")
-        if not data_arriendo.get('arrendatario', {}).get('rut'):
-                raise ValueError("El RUT del arrendatario es obligatorio para ventas cerradas")
         
         tipo_trabajador = data_arriendo['arrendatario'].get('tipo_trabajador','')
         
@@ -55,27 +61,28 @@ def guardar_arriendo(data_arriendo):
         
 
         arrendador_data = {
-             'rut': data_arriendo['arrendador']['rut'],
-             'nombre': data_arriendo['arrendador']['nombre'],
-             'direccion': data_arriendo['arrendador']['direccion'],
-             'telefono': data_arriendo['arrendador']['telefono'],
-             'correo_electronico': data_arriendo['arrendador']['correo_electronico']
+             'rut': data_arriendo['arrendador'].get('rut',''),
+             'nombre': data_arriendo['arrendador'].get('nombre',''),
+             'direccion': data_arriendo['arrendador'].get('direccion',''),
+             'telefono': data_arriendo['arrendador'].get('telefono',''),
+             'correo_electronico': data_arriendo['arrendador'].get('correo_electronico','')
         }
 
         supabase.table("arrendador").upsert(arrendador_data,
                                             on_conflict="rut").execute()
         
         arrendatario_data = {
-                 'rut': data_arriendo['arrendatario']['rut'] ,
-                 'nombre': data_arriendo['arrendatario']['nombre'] ,
-                 'telefono': data_arriendo['arrendatario']['telefono'] ,
-                 'email': data_arriendo['arrendatario']['email'] ,
-                 'direccion': data_arriendo['arrendatario']['direccion'],
-                 'tipo_trabajador': data_arriendo['arrendatario']['tipo_trabajador'],
-                 'antiguedad_laboral': data_arriendo['arrendatario']['antiguedad_laboral'],
-                 'dicom': data_arriendo['arrendatario']['dicom'],
-                 'comentarios': data_arriendo['arrendatario']['comentarios'],
-                 'renta': float(data_arriendo['arrendatario']['renta'] or 0)
+                 'rut': data_arriendo['arrendatario'].get('rut',''),
+                 'nombre': data_arriendo['arrendatario'].get('nombre','') ,
+                 'telefono': data_arriendo['arrendatario'].get('telefono','') ,
+                 'email': data_arriendo['arrendatario'].get('email','') ,
+                 'direccion': data_arriendo['arrendatario'].get('direccion',''),
+                 'tipo_trabajador': data_arriendo['arrendatario'].get('tipo_trabajador','Dependiente'),
+                 'antiguedad_laboral': int(data_arriendo['arrendatario'].get('antiguedad_laboral') or 0),
+                 'dicom': data_arriendo['arrendatario'].get('dicom','Sí'),
+                 'comentarios': data_arriendo['arrendatario'].get('comentarios',''),
+                 'renta': safe_numeric(data_arriendo['arrendatario'].get('renta'))
+
 
         }
     
@@ -84,18 +91,18 @@ def guardar_arriendo(data_arriendo):
         
         if tipo_trabajador == "Dependiente":
             evaluacion_arrendatario_data = {
-                'rut_arrendatario': data_arriendo['arrendatario']['rut'],
-                'fecha_evaluacion': data_arriendo['evaluacion_arrendatario']['fecha_evaluacion'],
-                'sueldo_base': data_arriendo['evaluacion_arrendatario']['sueldo_base'],
-                'gratificacion': data_arriendo['evaluacion_arrendatario']['gratificacion'],
-                'total_imponible': data_arriendo['evaluacion_arrendatario']['total_imponible'],
-                'total_no_imponible': data_arriendo['evaluacion_arrendatario']['total_no_imponible'],
-                'descuentos_legales': data_arriendo['evaluacion_arrendatario']['descuentos_legales'],
-                'liquido_pago':data_arriendo['evaluacion_arrendatario']['liquido_pago'],
-                'anticipo': data_arriendo['evaluacion_arrendatario']['anticipo'],
-                'desc_varios': data_arriendo['evaluacion_arrendatario']['desc_varios'],
-                'locomocion': data_arriendo['evaluacion_arrendatario']['locomocion'],
-                'im_renta': data_arriendo['evaluacion_arrendatario']['im_renta']
+                'rut_arrendatario': data_arriendo['arrendatario'].get('rut',''),
+                'fecha_evaluacion': data_arriendo['evaluacion_arrendatario'].get('fecha_evaluacion'),
+                'sueldo_base': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('sueldo_base')),
+                'gratificacion': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('gratificacion')),
+                'total_imponible': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('total_imponible')),
+                'total_no_imponible': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('total_no_imponible')),
+                'descuentos_legales': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('descuentos_legales')),
+                'liquido_pago': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('liquido_pago')),
+                'anticipo': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('anticipo')),
+                'desc_varios': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('desc_varios')),
+                'locomocion': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('locomocion')),
+                'im_renta': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('im_renta')),
                 
             }
 
@@ -108,12 +115,12 @@ def guardar_arriendo(data_arriendo):
             evaluacion_independiente_data = {
                 'rut_arrendatario': eval_data['rut_arrendatario'],
                 'periodo_desde': eval_data['periodo_desde'],
-                'factor_castigo': eval_data['factor_castigo'],
-                'ventas_anuales': eval_data['ventas_anuales'],
-                'compras_anuales': eval_data['compras_anuales'],
-                'excedente_anual': eval_data['excedente_anual'],
-                'renta_anual_estimada': eval_data['renta_anual_estimada'],
-                'renta_mensual_estimada': eval_data['renta_mensual_estimada'],
+                'factor_castigo': safe_numeric(eval_data.get('factor_castigo')),
+                'ventas_anuales': safe_numeric(eval_data.get('ventas_anuales')),
+                'compras_anuales': safe_numeric(eval_data.get('compras_anuales')),
+                'excedente_anual': safe_numeric(eval_data.get('excedente_anual')),
+                'renta_anual_estimada': safe_numeric(eval_data.get('renta_anual_estimada')),
+                'renta_mensual_estimada': safe_numeric(eval_data.get('renta_mensual_estimada')),
             }
 
             eval_resp = (
@@ -131,10 +138,10 @@ def guardar_arriendo(data_arriendo):
                 supabase.table("evaluacion_independiente_detalle").insert({
                     'evaluacion_id': evaluacion_id,
                     'periodo': mes['periodo'],
-                    'iva_debito': mes['iva_debito'],
-                    'iva_credito': mes['iva_credito'],
-                    'ventas_netas_estimadas': mes['ventas_netas_estimadas'],
-                    'compras_netas_estimadas': mes['compras_netas_estimadas']
+                    'iva_debito': safe_numeric(mes.get('iva_debito')),
+                    'iva_credito': safe_numeric(mes.get('iva_credito')),
+                    'ventas_netas_estimadas': safe_numeric(mes.get('ventas_netas_estimadas')),
+                    'compras_netas_estimadas': safe_numeric(mes.get('compras_netas_estimadas'))
                 }).execute()
 
 
@@ -143,45 +150,44 @@ def guardar_arriendo(data_arriendo):
 
         arriendo_data = {
              'codigo_interno': data_arriendo['propiedad']['codigo'],
-             'rut_arrendador': data_arriendo['arrendador']['rut'],
-             'rut_arrendatario': data_arriendo['arrendatario']['rut'],
+             'rut_arrendador': data_arriendo['arrendador'].get('rut',''),
+             'rut_arrendatario': data_arriendo['arrendatario'].get('rut', ''),
              'fecha_inicio':data_arriendo['arriendo']['fecha_inicio'] or None,
              'fecha_termino':data_arriendo['arriendo']['fecha_termino'] or None,
-             'tipo_documento': data_arriendo['arriendo']['tipo_documento'],
-             'renta_mensual':data_arriendo['arriendo']['renta_mensual'],
-             'cuenta_fm': data_arriendo['arriendo']['cuenta_fm'],
-             'garantia':data_arriendo['arriendo']['garantia'],
-             'gastos_comunes_incluidos':data_arriendo['arriendo']['gastos_comunes_incluidos'],
-             'estado':data_arriendo['arriendo']['estado'],
-             'tipo_contrato':data_arriendo['arriendo']['tipo_contrato'],
-             'forma_pago':data_arriendo['arriendo']['forma_pago'],
-             'periodo_pago':data_arriendo['arriendo']['periodo_pago'],
-             'nro_cuenta': data_arriendo['arriendo']['nro_cuenta'],
-             'banco_destino': data_arriendo['arriendo']['banco_destino'],
-             'aseo_municipal': data_arriendo['arriendo']['aseo_municipal'],
-             'reajuste': data_arriendo['arriendo']['reajuste'],
-             'ggcc': data_arriendo['arriendo']['ggcc'],
+             'tipo_documento': data_arriendo['arriendo'].get('tipo_documento', 'Boleta'),
+             'renta_mensual':safe_numeric(data_arriendo['arriendo'].get('renta_mensual')),
+             'cuenta_fm': data_arriendo['arriendo'].get('cuenta_fm', '2'),
+             'garantia':safe_numeric(data_arriendo['arriendo'].get('garantia')),
+             'gastos_comunes_incluidos':data_arriendo['arriendo'].get('gastos_comunes_incluidos'),
+             'estado':data_arriendo['arriendo'].get('estado', 'Vigente'),
+             'tipo_contrato':data_arriendo['arriendo'].get('tipo_contrato','Plazo Indefinido'),
+             'forma_pago':data_arriendo['arriendo'].get('forma_pago', ''),
+             'periodo_pago':data_arriendo['arriendo'].get('periodo_pago'),
+             'nro_cuenta': data_arriendo['arriendo'].get('nro_cuenta', ''),
+             'banco_destino': data_arriendo['arriendo'].get('banco_destino', ''),
+             'aseo_municipal': data_arriendo['arriendo'].get('aseo_municipal',''),
+             'reajuste': data_arriendo['arriendo'].get('reajuste',''),
+             'ggcc': data_arriendo['arriendo'].get('ggcc', ''),
 
                
-             'honorarios_porcentaje': data_arriendo['arriendo']['honorarios_porcentaje'],
-             'titular_deposito': data_arriendo['arriendo']['titular_deposito'],
-             'quien_deposita': data_arriendo['arriendo']['quien_deposita'],
-             'correo_deposito': data_arriendo['arriendo']['correo_deposito'],
-             'dia_pago': data_arriendo['arriendo']['dia_pago'],
-             'honorarios_monto': data_arriendo['arriendo']['honorarios_monto'],
-             'tipo_cuenta': data_arriendo['arriendo']['tipo_cuenta'],
-             'rut_para_deposito': data_arriendo['arriendo']['rut_para_deposito'],
-             'cuenta_ggcc': data_arriendo['arriendo']['cuenta_ggcc'],
-             'ultimo_mes_pago': data_arriendo['arriendo']['ultimo_mes_pago'],
-             'direccion_consulta': data_arriendo['arriendo']['direccion_consulta'],
-             'periodo_anterior': data_arriendo['arriendo']['periodo_anterior'],
-             'monto_anterior': data_arriendo['arriendo']['monto_anterior'],
-             'naturaleza_bien_raiz': data_arriendo['arriendo']['naturaleza_bien_raiz'],
-             'tipo_documento': data_arriendo['arriendo']['tipo_documento'],
-             'dfl2': data_arriendo['arriendo']['dfl2'],
-             'destino': data_arriendo['arriendo']['destino'],
-             'amoblado': data_arriendo['arriendo']['amoblado'],
-             'observaciones':data_arriendo['arriendo']['observaciones']
+             'honorarios_porcentaje': safe_numeric(data_arriendo['arriendo'].get('honorarios_porcentaje')),
+             'titular_deposito': data_arriendo['arriendo'].get('titular_deposito', ''),
+             'quien_deposita': data_arriendo['arriendo'].get('quien_deposita',''),
+             'correo_deposito': data_arriendo['arriendo'].get('correo_deposito',''),
+             'dia_pago': data_arriendo['arriendo'].get('dia_pago', ''),
+             'honorarios_monto': safe_numeric(data_arriendo['arriendo'].get('honorarios_monto')),
+             'tipo_cuenta': data_arriendo['arriendo'].get('tipo_cuenta',''),
+             'rut_para_deposito': data_arriendo['arriendo'].get('rut_para_deposito',''),
+             'cuenta_ggcc': data_arriendo['arriendo'].get('cuenta_ggcc', ''),
+             'ultimo_mes_pago': data_arriendo['arriendo'].get('ultimo_mes_pago', ''),
+             'direccion_consulta': data_arriendo['arriendo'].get('direccion_consulta', ''),
+             'periodo_anterior': data_arriendo['arriendo'].get('periodo_anterior', ''),
+             'monto_anterior': safe_numeric(data_arriendo['arriendo'].get('monto_anterior')),
+             'naturaleza_bien_raiz': data_arriendo['arriendo'].get('naturaleza_bien_raiz',''),
+             'dfl2': data_arriendo['arriendo'].get('dfl12', 'Si'),
+             'destino': data_arriendo['arriendo'].get('destino', ''),
+             'amoblado': data_arriendo['arriendo'].get('amoblado', ''),
+             'observaciones':data_arriendo['arriendo'].get('observaciones')
                 
         }
         arriendo_response = supabase.table("arriendo").upsert(

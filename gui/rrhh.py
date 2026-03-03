@@ -76,6 +76,7 @@ class DoubleClickButton(QPushButton):
     
 
 class DialogoTrabajador(QDialog):
+    trabajador_guardado = Signal()
     def __init__(self, trabajador=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Ficha de Trabajador")
@@ -216,6 +217,7 @@ class DialogoTrabajador(QDialog):
             "activo": True,
         }
 
+        self.trabajador_guardado.emit()
         self.accept()
 
 
@@ -266,6 +268,17 @@ class TabTrabajadores(QWidget):
         layout.addWidget(self.tabla)
 
         self.tabla.verticalHeader().setVisible(False)
+        self.tabla.resizeColumnsToContents()
+        self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabla.setSelectionMode(QTableWidget.SingleSelection)
+
+        self.tabla.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #D5D8DC;
+                color: black;
+            }
+        """)
+
 
         # -----------------------------
         # 3. BOTONES (ABAJO)
@@ -274,11 +287,13 @@ class TabTrabajadores(QWidget):
         self.btn_agregar = DoubleClickButton("Agregar")
         self.btn_editar = DoubleClickButton("Editar")
         self.btn_eliminar = DoubleClickButton("Eliminar")
+        self.btn_actualizar_tabla = QPushButton("Actualizar tabla")
         self.btn_actualizar_tasa_afp = DoubleClickButton("Actualizar tasa afp")
 
         boton_layout.addWidget(self.btn_agregar)
         boton_layout.addWidget(self.btn_editar)
         boton_layout.addWidget(self.btn_eliminar)
+        boton_layout.addWidget(self.btn_actualizar_tabla)
         boton_layout.addWidget(self.btn_actualizar_tasa_afp)
 
         layout.addLayout(boton_layout)
@@ -287,6 +302,7 @@ class TabTrabajadores(QWidget):
         self.btn_agregar.doubleClicked.connect(self.agregar_trabajador)
         self.btn_editar.doubleClicked.connect(self.editar_trabajador)
         self.btn_eliminar.doubleClicked.connect(self.eliminar_trabajador)
+        self.btn_actualizar_tabla.clicked.connect(self.cargar_trabajadores)
         self.btn_actualizar_tasa_afp.doubleClicked.connect(self.abrir_dialogo)
 
 
@@ -295,8 +311,11 @@ class TabTrabajadores(QWidget):
         self.cargar_trabajadores()
 
 
+    
+
     def abrir_dialogo(self):
         dialogo = DialogActualizarTasaAFP(parent=self)
+        dialogo.trabajador_guardado.connect(self.cargar_trabajadores)
         dialogo.exec()
 
     # ----------------------------------------
@@ -452,6 +471,7 @@ class Tabdocs(QWidget):
 # ====================================================
 
 class DialogoLiquidacion(QDialog):
+    liquidacion_guardada = Signal()
 
     def insertar_logo(self, ws, ruta_logo):
         # 1️⃣ Ajustar columnas A y B
@@ -1418,6 +1438,9 @@ class DialogoLiquidacion(QDialog):
                 QMessageBox.warning(self, "Error", "No se pudo crear la liquidación.")
                 return
 
+        
+        self.liquidacion_guardada.emit()
+
         self.accept()
 
                 
@@ -1476,6 +1499,17 @@ class TabLiquidaciones(QWidget):
 
         # Ajusta cada columna a su contenido
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabla.setSelectionMode(QTableWidget.SingleSelection)
+
+        self.tabla.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #D5D8DC;
+                color: black;
+            }
+        """)
+
+
 
         # -----------------------------
         # 3. BOTONES (ABAJO)
@@ -1483,10 +1517,12 @@ class TabLiquidaciones(QWidget):
         boton_layout = QHBoxLayout()
         self.btn_nueva = DoubleClickButton("Nueva Liquidación")
         self.btn_ver = DoubleClickButton("Ver / Editar")
+        self.btn_actualizar = QPushButton("Actualizar tabla")
         self.btn_eliminar = DoubleClickButton("Eliminar")
 
         boton_layout.addWidget(self.btn_nueva)
         boton_layout.addWidget(self.btn_ver)
+        boton_layout.addWidget(self.btn_actualizar)
         boton_layout.addWidget(self.btn_eliminar)
 
         layout.addLayout(boton_layout)
@@ -1495,6 +1531,7 @@ class TabLiquidaciones(QWidget):
         self.btn_nueva.doubleClicked.connect(self.crear_liquidacion)
         self.btn_ver.doubleClicked.connect(self.ver_editar_liquidacion)
         self.btn_eliminar.doubleClicked.connect(self.eliminar_liquidacion)
+        self.btn_actualizar.clicked.connect(self.cargar_liquidaciones)
 
         self.todo_liquidaciones = []
         self.cargar_liquidaciones()
@@ -1551,6 +1588,7 @@ class TabLiquidaciones(QWidget):
 
     def crear_liquidacion(self):
         dlg = DialogoLiquidacion(parent=self)
+        dlg.liquidacion_guardada.connect(self.cargar_liquidaciones)
         if dlg.exec():
             self.cargar_liquidaciones()
 

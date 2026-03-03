@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QHeaderView,QGroupBox ,QDialogButtonBox,QSizePolicy, QFileDialog, QMainWindow,QHBoxLayout,QTextEdit,QTabWidget,QDoubleSpinBox,QHeaderView,QFrame,QWidget,QLabel, QVBoxLayout,QAbstractItemView,QTableWidget,QTableWidgetItem,QScrollArea, QFormLayout, QLineEdit, QComboBox, QPushButton,QLabel, QDateEdit, QCheckBox, QMessageBox, QTableWidget, QTableWidgetItem,QSpinBox, QDialog
-from services.arriendos_service import obtener_arriendos_resumen,CASTIGO_DEFAULT,IVA_FACTOR,calcular_evaluacion_independiente, eliminar_arriendo, guardar_gastos_arriendo,obtener_ultima_evaluacion_arrendatario,guardar_abonos_arriendo, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
+from services.arriendos_service import obtener_arriendos_resumen,CASTIGO_DEFAULT,IVA_FACTOR,calcular_evaluacion_independiente,safe_numeric, eliminar_arriendo, guardar_gastos_arriendo,obtener_ultima_evaluacion_arrendatario,guardar_abonos_arriendo, obtener_detalle_arriendo,obtener_arriendos_finanzas,obtener_arriendos_por_estado, guardar_arriendo
 from PySide6.QtCore import Qt, QDate, Signal, QTimer
 from PySide6.QtGui import QIntValidator, QColor, QDoubleValidator, QFont
 from gui.usuario_actual import UsuarioActual
@@ -215,8 +215,8 @@ class DetalleArriendoWindow(QWidget):
         campos_basicos = [
             ("Fecha Inicio", arriendo.get("fecha_inicio")),
             ("Fecha de Término", arriendo.get("fecha_termino")),
-            ("Renta Mensual", f"${int(arriendo.get('renta_mensual')):,}".replace(",", ".")),
-            ("Garantía", f"${int(arriendo.get('garantia')):,}".replace(",", ".")),
+            ("Renta Mensual", self.format_money(arriendo.get('renta_mensual'))),
+            ("Garantía", self.format_money(arriendo.get('garantia'))),
             ("Gastos comunes incluidos", "Sí" if arriendo.get("gastos_comunes_incluidos") else "No"),
             ("Estado del arriendo", arriendo.get("estado")),
             ("Tipo de contrato", arriendo.get("tipo_contrato")),
@@ -283,7 +283,7 @@ class DetalleArriendoWindow(QWidget):
 
         campos_honorarios = [
             ("Honorarios (%):", f"{float((arriendo.get('honorarios_porcentaje') or 0) * 100):.1f}%"),
-            ("Honorarios (monto):", f"${int(float(arriendo.get('honorarios_monto'))):,}".replace(",", ".")),
+            ("Honorarios (monto):", self.format_money(arriendo.get('honorarios_monto')))
         ]
 
         for label, value in campos_honorarios:
@@ -303,12 +303,12 @@ class DetalleArriendoWindow(QWidget):
         campos_extra = [
             ("Último mes pago:", arriendo.get("ultimo_mes_pago")),
             ("Aseo municipal:", arriendo.get("aseo_municipal")),
-            ("Reajuste:", f"${int(float(arriendo.get('reajuste'))):,}"),
+            ("Reajuste:", self.format_money(arriendo.get('reajuste'))),
             ("GGCC:", arriendo.get("ggcc")),
             ("Cuenta GGCC:", arriendo.get("cuenta_ggcc")),
             ("Dirección consulta:", arriendo.get("direccion_consulta")),
             ("Periodo anterior:", arriendo.get("periodo_anterior")),
-            ("Monto anterior:", f"${int(float(arriendo.get('monto_anterior'))):,}"),
+            ("Monto anterior:", self.format_money(arriendo.get('monto_anterior'))),
             ("Naturaleza bien raíz:", arriendo.get("naturaleza_bien_raiz")),
             ("DFL12:", arriendo.get("dfl12")),
             ("Destino:", arriendo.get("destino")),
@@ -359,6 +359,10 @@ class DetalleArriendoWindow(QWidget):
 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo abrir el formulario: {e}")
+
+    def format_money(self, value):
+        num = safe_numeric(value)
+        return f"${int(num):,}".replace(",", ".")
 
     
     def eliminar_arriendo(self):
@@ -508,6 +512,8 @@ class DashboardArriendos(QWidget):
         self.tabla_arriendos.itemSelectionChanged.connect(self.habilitar_boton_gastos)
         
         layout.addWidget(self.tabla_arriendos)
+
+        self.tabla_arriendos.resizeColumnsToContents()
 
         button_layout = QHBoxLayout()
 
@@ -1251,7 +1257,16 @@ class FormularioArriendo(QWidget):
             else:
                 self.cargar_datos_arriendo(self.arriendo_id)
 
-    
+    def money(self, value):
+            return f"{int(safe_numeric(value)):,}".replace(",", ".")
+
+    def percent(self, value):
+            return f"{safe_numeric(value) * 100:.1f}%"
+
+    def safe_text(self, value):
+            return "" if value in (None, "") else str(value)
+
+            
 
 
     def setup_tab_arrendador(self, tab):
@@ -1981,11 +1996,12 @@ class FormularioArriendo(QWidget):
 
     def cargar_datos_arriendo(self, arriendo_id):
         try:
-            # ===============================
-            # HELPERS
-            # ===============================
+
             def set_text(widget, value):
-                widget.setText("" if value is None else str(value))
+                widget.setText(self.safe_text(value))
+
+            def set_money(widget, value):
+                widget.setText(self.money(value))
 
             def set_date(widget, value):
                 if value:
@@ -1996,7 +2012,7 @@ class FormularioArriendo(QWidget):
             # ===============================
             # ARRENDADOR
             # ===============================
-            arrendador = self.detalle_arriendo.get('arrendador')
+            arrendador = self.detalle_arriendo.get('arrendador', {})
             if isinstance(arrendador, dict):
                 set_text(self.txt_arren_nombre, arrendador.get("nombre"))
                 set_text(self.txt_arren_rut, arrendador.get("rut"))
@@ -2007,23 +2023,28 @@ class FormularioArriendo(QWidget):
             # ===============================
             # ARRENDATARIO
             # ===============================
-            arrendatario = self.detalle_arriendo.get('arrendatario')
+            arrendatario = self.detalle_arriendo.get('arrendatario', {})
             if isinstance(arrendatario, dict):
                 set_text(self.txt_arrendatario_rut, arrendatario.get("rut"))
                 set_text(self.txt_arrendatario_nombre, arrendatario.get("nombre"))
                 set_text(self.txt_arrendatario_telefono, arrendatario.get("telefono"))
                 set_text(self.txt_arrendatario_email, arrendatario.get("email"))
                 set_text(self.txt_arrendatario_direccion, arrendatario.get("direccion"))
-                self.cmb_tipo_trabajador.setCurrentText(arrendatario.get("tipo_trabajador", "Dependiente"))
+
+                self.cmb_tipo_trabajador.setCurrentText(
+                    arrendatario.get("tipo_trabajador", "Dependiente")
+                )
+
                 set_text(self.txt_antiguedad_laboral, arrendatario.get("antiguedad_laboral"))
                 self.cmb_dicom.setCurrentText(arrendatario.get("dicom", "Sí"))
                 set_text(self.txt_comentarios, arrendatario.get("comentarios"))
-                set_text(self.txt_renta, f"{int(arrendatario.get('renta')):,}".replace(",", "."))
+
+                set_money(self.txt_renta, arrendatario.get("renta"))
 
             # ===============================
             # PROPIEDAD
             # ===============================
-            propiedad = self.detalle_arriendo.get('propiedad')
+            propiedad = self.detalle_arriendo.get('propiedad', {})
             if isinstance(propiedad, dict):
                 set_text(self.txt_prop_codigo, propiedad.get("codigo_interno"))
                 set_text(self.txt_prop_direccion, propiedad.get("direccion"))
@@ -2034,47 +2055,49 @@ class FormularioArriendo(QWidget):
                 )
 
             # ===============================
-            # EVALUACIÓN ARRENDATARIO
+            # EVALUACIÓN
             # ===============================
             rut = self.txt_arrendatario_rut.text().strip()
             if rut:
-
                 evaluacion = obtener_ultima_evaluacion_arrendatario(rut)
 
                 if isinstance(evaluacion, dict):
-                    # Tabla evaluación (solo resultado final)
                     self.cargar_resultado_final_evaluacion(evaluacion)
-
-                    # Fecha evaluación
                     set_date(self.fecha_evaluacion_arrendatario, evaluacion.get("fecha_evaluacion"))
-
-                    # Impuesto renta
                     set_text(self.txt_impuesto_renta, evaluacion.get("im_renta"))
 
-                
             # ===============================
             # ARRIENDO
             # ===============================
-            arriendo = self.detalle_arriendo.get('arriendo')
+            arriendo = self.detalle_arriendo.get('arriendo', {})
             if isinstance(arriendo, dict):
 
                 set_date(self.fecha_inicio, arriendo.get("fecha_inicio"))
                 set_date(self.fecha_termino, arriendo.get("fecha_termino"))
 
-                set_text(self.txt_renta_mensual, f"{int(float(arriendo.get('renta_mensual'))):,}".replace(",", "."))
-
-                set_text(self.txt_garantia, f"{int(float(arriendo.get('garantia'))):,}".replace(",", "."))
+                set_money(self.txt_renta_mensual, arriendo.get("renta_mensual"))
+                set_money(self.txt_garantia, arriendo.get("garantia"))
 
                 self.chk_gastos_comunes.setChecked(
                     bool(arriendo.get("gastos_comunes_incluidos", False))
                 )
 
-                self.cmb_estado_arriendo.setCurrentText(arriendo.get("estado", "Vigente"))
-                self.cmb_tipo_contrato.setCurrentText(arriendo.get("tipo_contrato", "Plazo Fijo"))
+                self.cmb_estado_arriendo.setCurrentText(
+                    arriendo.get("estado", "Vigente")
+                )
+
+                self.cmb_tipo_contrato.setCurrentText(
+                    arriendo.get("tipo_contrato", "Plazo Fijo")
+                )
 
                 set_text(self.txt_forma_pago, arriendo.get("forma_pago"))
-                self.cmb_periodo_pago.setCurrentText(arriendo.get("periodo_pago", "Mensual"))
-                self.cmb_cuenta_fm.setCurrentText(str(arriendo.get("cuenta_fm", "2")))
+                self.cmb_periodo_pago.setCurrentText(
+                    arriendo.get("periodo_pago", "Mensual")
+                )
+
+                self.cmb_cuenta_fm.setCurrentText(
+                    str(arriendo.get("cuenta_fm", "2"))
+                )
 
                 set_text(self.txt_nro_cuenta, arriendo.get("nro_cuenta"))
                 set_text(self.txt_banco_destino, arriendo.get("banco_destino"))
@@ -2085,23 +2108,36 @@ class FormularioArriendo(QWidget):
                 set_text(self.txt_correo_deposito, arriendo.get("correo_deposito"))
 
                 set_text(self.txt_aseo_municipal, arriendo.get("aseo_municipal"))
-                set_text(self.txt_reajuste, f"{int(float(arriendo.get('reajuste'))):,}".replace(",", "."))
+                set_money(self.txt_reajuste, arriendo.get("reajuste"))
                 set_text(self.txt_ggcc, arriendo.get("ggcc"))
                 set_text(self.txt_cuenta_ggcc, arriendo.get("cuenta_ggcc"))
 
-                set_text(self.txt_honorarios_porcentaje, arriendo.get("honorarios_porcentaje"))
-                set_text(self.txt_honorarios_monto, f"{int(float(arriendo.get('honorarios_monto'))):,}".replace(",", "."))
+                set_text(
+                    self.txt_honorarios_porcentaje,
+                    self.percent(arriendo.get("honorarios_porcentaje"))
+                )
+
+                set_money(self.txt_honorarios_monto, arriendo.get("honorarios_monto"))
 
                 set_text(self.txt_dia_pago, arriendo.get("dia_pago"))
                 set_text(self.txt_ultimo_mes_pago, arriendo.get("ultimo_mes_pago"))
                 set_text(self.txt_direccion_consulta, arriendo.get("direccion_consulta"))
                 set_text(self.txt_periodo_anterior, arriendo.get("periodo_anterior"))
-                set_text(self.txt_monto_anterior, f"{int(float(arriendo.get('monto_anterior'))):,}".replace(",", "."))
+
+                set_money(self.txt_monto_anterior, arriendo.get("monto_anterior"))
+
                 set_text(self.txt_naturaleza_bien_raiz, arriendo.get("naturaleza_bien_raiz"))
 
-                self.cmb_dfl12.setCurrentText(arriendo.get("df12", "Si"))
+                # 🔴 CORRECCIÓN IMPORTANTE
+                self.cmb_dfl12.setCurrentText(
+                    arriendo.get("dfl2", "Si")
+                )
+
                 set_text(self.txt_destino, arriendo.get("destino"))
-                self.cmb_amoblado.setCurrentText(arriendo.get("amoblado", "Si"))
+                self.cmb_amoblado.setCurrentText(
+                    arriendo.get("amoblado", "Si")
+                )
+
                 set_text(self.txt_observaciones, arriendo.get("observaciones"))
 
         except Exception as e:
@@ -2111,6 +2147,7 @@ class FormularioArriendo(QWidget):
                 "Error",
                 f"No se pudieron cargar los datos del arriendo:\n{e}"
             )
+
 
 
 
@@ -2382,6 +2419,14 @@ class FormularioArriendo(QWidget):
 
         wb.save(ruta_archivo)
 
+    def get_porcentaje(self, value):
+        if not value or value.strip() == "":
+            return 0.0
+        try:
+            limpio = value.replace('%', '').replace(',', '.').strip()
+            return float(limpio) / 100
+        except:
+            return 0.0
 
 
     def guardar_arriendo(self):
@@ -2447,7 +2492,7 @@ class FormularioArriendo(QWidget):
                     'reajuste': self.txt_reajuste.text(),
                     'ggcc': self.txt_ggcc.text(),
 
-                    'honorarios_porcentaje':(float(self.txt_honorarios_porcentaje.text().replace('%', '').replace(',', '.')) / 100),
+                    'honorarios_porcentaje': self.get_porcentaje(self.txt_honorarios_porcentaje.text()),
                     'honorarios_monto': self.get_int(self.txt_honorarios_monto.text()),
                     'titular_deposito': self.txt_titular_deposito.text(),
                     'quien_deposita': self.txt_quien_deposita.text(),

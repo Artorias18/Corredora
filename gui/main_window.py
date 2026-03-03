@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 
-from gui import ventas, arriendos, rrhh, finanzas, gestion_usuarios, propiedades, sesion_usuario
+from gui import ventas, arriendos, rrhh, finanzas, gestion_usuarios, propiedades, sesion_usuario, eva_arrendatario
 
 
 class MainWindow(QMainWindow):
@@ -26,17 +26,17 @@ class MainWindow(QMainWindow):
 
         self.tabs.addTab(self.placeholders[0], "Ventas")
         self.tabs.addTab(self.placeholders[1], "Arriendos")
-        # self.tabs.addTab(self.placeholders[2], "Propiedades")
-        self.tabs.addTab(self.placeholders[2], "RRHH")
-        self.tabs.addTab(self.placeholders[3], "Finanzas")
+        self.tabs.addTab(self.placeholders[2], "Evaluaciones")
+        self.tabs.addTab(self.placeholders[3], "RRHH")
+        self.tabs.addTab(self.placeholders[4], "Finanzas")
 
         # ─── Lazy map ──────────────────────────────────────
         self.tab_map = {
             0: lambda: ventas.DashboardVentas(self.rol),
             1: lambda: arriendos.DashboardArriendos(),
-            # 2: lambda: propiedades.DashboardPropiedades(),
-            2: lambda: rrhh.DashboardRRHH(self.user_id),
-            3: lambda: finanzas.DashboardFinanzas(),
+            2: lambda: eva_arrendatario.DashboardEvaluaciones(),
+            3: lambda: rrhh.DashboardRRHH(self.user_id),
+            4: lambda: finanzas.DashboardFinanzas(),
         }
 
         self.loaded_tabs = set()
