@@ -8,7 +8,7 @@ from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 from services.supabase_client import supabase
-from services.eva_arrendatarios_service import actualizar_arrendatario,eliminar_evaluacion,obtener_evaluacion_completa,editar_evaluacion,guardar_evaluacion,CASTIGO_DEFAULT, IVA_FACTOR,calcular_evaluacion_independiente,obtener_detalle_evaluacion,cargar_detalle_dependiente,safe_numeric,obtener_evaluaciones_arrendatario, cargar_detalle, obtener_arrendatarios, obtener_arrendatario, crear_arrendatario, eliminar_arrendatario
+from services.eva_arrendatarios_service import actualizar_arrendatario,regla_3x_renta,eliminar_evaluacion,obtener_evaluacion_completa,editar_evaluacion,guardar_evaluacion,CASTIGO_DEFAULT, IVA_FACTOR,calcular_evaluacion_independiente,obtener_detalle_evaluacion,cargar_detalle_dependiente,safe_numeric,obtener_evaluaciones_arrendatario, cargar_detalle, obtener_arrendatarios, obtener_arrendatario, crear_arrendatario, eliminar_arrendatario
 import json
 import calendar
 import re
@@ -64,15 +64,22 @@ class TabArrendatarios(QWidget):
             # -----------------------------
             self.tabla = QTableWidget()
             self.tabla.setColumnCount(3)
-            self.tabla.setHorizontalHeaderLabels([
-                "RUT", "Nombre", "Tipo Trabajador"
-            ])
-            layout.addWidget(self.tabla)
-
+            self.tabla.setHorizontalHeaderLabels(["RUT", "Nombre", "Tipo Trabajador"])
             self.tabla.verticalHeader().setVisible(False)
-            self.tabla.resizeColumnsToContents()
             self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
             self.tabla.setSelectionMode(QTableWidget.SingleSelection)
+
+            # Permitir que el texto se ajuste a varias líneas
+            self.tabla.setWordWrap(True)
+
+            # Ajustar columnas al contenido (no estira la última)
+            
+            self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+
+            # Ajustar altura de filas según contenido
+            self.tabla.resizeRowsToContents()
+
+            layout.addWidget(self.tabla)
 
             self.tabla.setStyleSheet("""
                 QTableWidget::item:selected {
@@ -171,7 +178,7 @@ class TabArrendatarios(QWidget):
                 data = dlg.datos
                 if data:
                     actualizar_arrendatario(arrendatario["rut"], data)
-                    self.cargar_arrendatario()
+                    self.cargar_arrendatarios()
 
 
     def eliminar_arrendatario(self):
@@ -213,20 +220,10 @@ class TabEvaluaciones(QWidget):
         )
         self.search_input.textChanged.connect(self.aplicar_filtros)
 
-        self.filtro_periodo = QComboBox()
-        self.filtro_periodo.addItems([
-            "Todos los periodos",
-            "Últimos 6 meses",
-            "Último año"
-        ])
-        self.filtro_periodo.currentIndexChanged.connect(
-            self.aplicar_filtros
-        )
 
         filtros_layout.addWidget(QLabel("Filtros:"))
         filtros_layout.addWidget(self.search_input)
-        filtros_layout.addWidget(QLabel("Periodo:"))
-        filtros_layout.addWidget(self.filtro_periodo)
+
 
         layout.addLayout(filtros_layout)
 
@@ -247,6 +244,17 @@ class TabEvaluaciones(QWidget):
         self.tabla.verticalHeader().setVisible(False)
         self.tabla.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabla.setSelectionMode(QTableWidget.SingleSelection)
+
+        # Permitir que el texto se ajuste en varias líneas
+        self.tabla.setWordWrap(True)
+
+        # Ajustar columnas al contenido
+        self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+
+        # Ajustar altura de filas según contenido
+        self.tabla.resizeRowsToContents()
+
+        
 
         self.tabla.itemSelectionChanged.connect(
             self._evaluacion_seleccionada
@@ -279,6 +287,12 @@ class TabEvaluaciones(QWidget):
 
         self.tabla_detalle.verticalHeader().setVisible(False)
         self.tabla_detalle.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tabla_detalle.setSelectionMode(QTableWidget.SingleSelection)
+
+        # Ajuste de texto y altura de filas
+        self.tabla_detalle.setWordWrap(True)
+        self.tabla_detalle.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tabla_detalle.resizeRowsToContents()
         
 
         splitter = QSplitter(Qt.Horizontal)
@@ -328,20 +342,21 @@ class TabEvaluaciones(QWidget):
 
         data = obtener_evaluaciones_arrendatario()
 
-        self.evaluaciones = data or []
+        self.todo_evaluaciones = data[:]   # ✅ lista completa base
+        self.evaluaciones = data[:]   
 
         self.render_tabla()
 
 
-    def render_tabla(self):
+    def render_tabla(self, evaluaciones=None):
+        if evaluaciones is None:
+            evaluaciones = self.evaluaciones  
 
         self.tabla.setRowCount(0)
-
         self._eval_ids = []
         self._eval_tipos = []
 
-        for fila, ev in enumerate(self.evaluaciones):
-
+        for fila, ev in enumerate(evaluaciones):
             self.tabla.insertRow(fila)
 
             self.tabla.setItem(fila, 0, QTableWidgetItem(ev.get("rut", "")))
@@ -433,43 +448,25 @@ class TabEvaluaciones(QWidget):
         return self._eval_tipos[fila]
 
     def aplicar_filtros(self):
-            texto = self.search_input.text().lower()
-            filtro = self.filtro_periodo.currentText()
+        texto = self.search_input.text().lower().strip()
 
-            filtrado = []
+        if not texto:
+            self.evaluaciones = self.todo_evaluaciones[:]   # ✅ reset
+            self.render_tabla()
+            return
 
-            for l in self.todo_liquidaciones:
-                nom = l.get("trabajador_nombre", "").lower()
-                rut = l.get("trabajador_rut", "").lower()
+        datos = []
+        for t in self.todo_evaluaciones:
+            rut = (t.get("rut") or "").lower()
+            nombre = (t.get("nombre") or "").lower()
 
-                if texto and texto not in nom and texto not in rut:
-                    continue
+            if texto in rut or texto in nombre:
+                datos.append(t)
 
-                periodo = QDate.fromString(l.get("periodo", "") + "-01", "yyyy-MM-dd")
-                hoy = QDate.currentDate()
+        self.evaluaciones = datos[:]       # ✅ mantiene estado
+        self.render_tabla(datos)           # o self.render_tabla() 
 
-                if filtro == "Últimos 6 meses" and periodo < hoy.addMonths(-6):
-                    continue
-                if filtro == "Último año" and periodo < hoy.addYears(-1):
-                    continue
 
-                filtrado.append(l)
-
-            self._poblar_tabla(filtrado)
-
-    def _poblar_tabla(self, liqs):
-            self.tabla.setRowCount(0)
-            self._ids = []
-
-            for row, l in enumerate(liqs):
-                self.tabla.insertRow(row)
-                self._ids.append(l.get("id"))
-                self.tabla.setItem(row, 0, QTableWidgetItem(l.get("periodo", "")))
-                self.tabla.setItem(row, 1, QTableWidgetItem(l.get("trabajador_rut", "")))
-                self.tabla.setItem(row, 2, QTableWidgetItem(l.get("trabajador_nombre", "")))
-                self.tabla.setItem(row, 3, QTableWidgetItem(str(int(l.get("total_haberes") or 0))))
-                self.tabla.setItem(row, 4, QTableWidgetItem(str(int(l.get("total_descuentos_general") or 0))))
-                self.tabla.setItem(row, 5, QTableWidgetItem(str(int(l.get("liquido_pagar") or 0))))
 
 
     def _id_seleccionado(self) -> int | None:
@@ -606,7 +603,7 @@ class FormularioArrendatario(QDialog):
         # --- Evaluación ---
         layout.addRow(self.crear_label("¿Tiene DICOM?"), self.cmb_dicom)
         layout.addRow(self.crear_label("Comentarios:"), self.txt_comentarios)
-        
+        layout.addRow(self.crear_label("Estado de Evaluación:"), self.cmb_evaluacion_estado)
         layout.addRow(self.crear_label("Renta Mensual:"), self.txt_renta)
 
     def cargar_datos_arrendatario(self, arrendatario):
@@ -641,7 +638,9 @@ class FormularioArrendatario(QDialog):
                 set_text(self.txt_antiguedad_laboral, arrendatario.get("antiguedad_laboral"))
                 self.cmb_dicom.setCurrentText(arrendatario.get("dicom", "Sí"))
                 set_text(self.txt_comentarios, arrendatario.get("comentarios"))
-
+                self.cmb_evaluacion_estado.setCurrentText(
+                    arrendatario.get("evaluacion_estado", "Pendiente")
+                )
                 set_money(self.txt_renta, arrendatario.get("renta"))
 
                 self.datos = None
@@ -667,10 +666,16 @@ class FormularioArrendatario(QDialog):
         return label
     
     def get_int(self, value):
-        if value is None:
-            return 0.0
+        if not value:  # None o cadena vacía
+            return 0
+        # eliminar puntos y comas si hay separadores de miles
+        value = value.replace(".", "").replace(",", "")
+        try:
+            return int(value)
+        except ValueError:
+            return 0
 
-    
+        
     def guardar_arrendatario(self):
         try:
             rut = self.txt_arrendatario_rut.text().strip()
@@ -687,9 +692,12 @@ class FormularioArrendatario(QDialog):
                 'tipo_trabajador': self.cmb_tipo_trabajador.currentText(),
                 'dicom': self.cmb_dicom.currentText(),
                 'comentarios': self.txt_comentarios.toPlainText(),
+                'evaluacion_estado': self.cmb_evaluacion_estado.currentText(),
+                'fecha_evaluacion': self.fecha_evaluacion.date().toString("yyyy-MM-dd"),
                 'antiguedad_laboral': self.get_int(self.txt_antiguedad_laboral.text()),
                 'renta': self.get_int(self.txt_renta.text())
             }
+
 
 
             if rut:
@@ -754,6 +762,28 @@ class FormularioEvaluacion(QDialog):
             self.arrendatario_seleccionado
         )
 
+        self.txt_monto_arriendo = QLineEdit()
+        self.txt_monto_arriendo.setPlaceholderText("Monto arriendo objetivo (ej: 400000)")
+
+        self.txt_veces_renta = QLineEdit()
+        self.txt_veces_renta.setReadOnly(True)
+
+        self.txt_renta_minima = QLineEdit()
+        self.txt_renta_minima.setReadOnly(True)
+
+        self.lbl_regla = QLabel("")
+        self.lbl_regla.setStyleSheet("font-weight: bold;")
+
+        frm = QFormLayout()
+        frm.addRow("Monto arriendo objetivo:", self.txt_monto_arriendo)
+        frm.addRow("Veces renta:", self.txt_veces_renta)
+        frm.addRow("Renta mínima (arriendo x3):", self.txt_renta_minima)
+        frm.addRow("Estado regla 3x:", self.lbl_regla)
+        layout_form.addLayout(frm)
+
+        # Recalcular al escribir
+        self.txt_monto_arriendo.textChanged.connect(self.recalcular_regla_3x)
+
         btn_guardar = DoubleClickButton("Guardar Evaluación")
         btn_guardar.doubleClicked.connect(self.guardar_evaluacion)
         layout_form.addWidget(btn_guardar)
@@ -762,6 +792,49 @@ class FormularioEvaluacion(QDialog):
 
         if self.evaluacion_id:
             self.cargar_evaluacion()
+
+    def _obtener_renta_calculada_actual(self) -> float:
+        arr = self.combo_arrendatario.currentData()
+        if not arr:
+            return 0.0
+
+        tipo = arr.get("tipo_trabajador")
+
+        if tipo == "Dependiente":
+            valores = self.obtener_diccionario_evaluacion()
+            # líquida a pago de la evaluación dependiente
+            return float(self.get_int(valores.get("liquido_pago", 0)))
+
+        if tipo == "Independiente":
+            ev = self.obtener_diccionario_evaluacion_independiente()
+            return float(self.get_int(ev["resumen"].get("renta_mensual_estimada", 0)))
+
+        return 0.0
+
+    def recalcular_regla_3x(self):
+        renta = self.parse_num(self._obtener_renta_calculada_actual())
+        arriendo = self.parse_num(self.txt_monto_arriendo.text())
+
+        # si arriendo inválido, corta antes (evita división por 0)
+        if arriendo <= 0:
+            self.txt_veces_renta.setText("")
+            self.txt_renta_minima.setText("")
+            self.lbl_regla.setText("⚠️ Ingrese un monto de arriendo válido (>0).")
+            self.lbl_regla.setStyleSheet("font-weight:bold; color:#B02A37;")
+            return
+
+        res = regla_3x_renta(renta, arriendo, minimo=3.0)
+
+        self.txt_veces_renta.setText(f"{res['veces_renta']:.2f}")
+        self.txt_renta_minima.setText(f"{res['renta_minima']:,.0f}")
+
+        if res["califica"]:
+            self.lbl_regla.setText("✅ Califica (>= 3x renta).")
+            self.lbl_regla.setStyleSheet("font-weight:bold; color:#1E7E34;")
+        else:
+            self.lbl_regla.setText("❌ No califica (< 3x renta).")
+            self.lbl_regla.setStyleSheet("font-weight:bold; color:#B02A37;")
+
 
     def arrendatario_seleccionado(self):
 
@@ -777,7 +850,7 @@ class FormularioEvaluacion(QDialog):
         # 🔥 activar tab correcto
         self.toggle_evaluacion_tab(tipo)
         self.toggle_evaluacion_independiente_tab(tipo)
-
+        self.recalcular_regla_3x()
 
     def cargar_arrendatarios(self):
         arrendatarios = obtener_arrendatarios()
@@ -1012,6 +1085,51 @@ class FormularioEvaluacion(QDialog):
         self.tabs.setTabVisible(self.setup_tab_evaluacion_independiente_index, mostrar)
                 
 
+
+    def parse_num(self, texto) -> float:
+        if texto is None:
+            return 0.0
+        if isinstance(texto, (int, float)):
+            return float(texto)
+
+        s = str(texto).strip()
+        if not s:
+            return 0.0
+
+        s = s.replace("$", "").replace(" ", "")
+        s = re.sub(r"[^\d\.,\-]", "", s)
+
+        if not s:
+            return 0.0
+
+        # ambos separadores => decidir decimal por el último
+        if "," in s and "." in s:
+            if s.rfind(",") > s.rfind("."):
+                # 30.000,50
+                s = s.replace(".", "").replace(",", ".")
+            else:
+                # 30,000.50
+                s = s.replace(",", "")
+        else:
+            # solo coma
+            if "," in s:
+                parts = s.split(",")
+                if len(parts[-1]) == 3:  # 30,000 miles
+                    s = s.replace(",", "")
+                else:  # 30,5 decimal
+                    s = s.replace(",", ".")
+            # solo punto
+            elif "." in s:
+                parts = s.split(".")
+                if len(parts[-1]) == 3:  # 30.000 miles
+                    s = s.replace(".", "")
+
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+
+
     def recalcular_evaluacion_independiente(self, item):
         if item.column() not in (1, 2):
             return
@@ -1019,18 +1137,11 @@ class FormularioEvaluacion(QDialog):
         meses = []
 
         for row in range(12):
-            try:
-                iva_debito = float(
-                    self.tbl_independiente.item(row, 1).text()
-                    .replace(".", "").replace(",", ".") or 0
-                )
-                iva_credito = float(
-                    self.tbl_independiente.item(row, 2).text()
-                    .replace(".", "").replace(",", ".") or 0
-                )
-            except ValueError:
-                iva_debito = 0
-                iva_credito = 0
+            txt_deb = self.tbl_independiente.item(row, 1).text() if self.tbl_independiente.item(row, 1) else ""
+            txt_cre = self.tbl_independiente.item(row, 2).text() if self.tbl_independiente.item(row, 2) else ""
+
+            iva_debito = self.parse_num(txt_deb)
+            iva_credito = self.parse_num(txt_cre)
 
             meses.append({
                 "iva_debito": iva_debito,
@@ -1041,6 +1152,7 @@ class FormularioEvaluacion(QDialog):
 
         self.actualizar_tabla_independiente(resultado)
         self.actualizar_resumen_independiente(resultado)
+        self.recalcular_regla_3x()
 
     def actualizar_tabla_independiente(self, resultado):
         self.tbl_independiente.blockSignals(True)
@@ -1151,6 +1263,7 @@ class FormularioEvaluacion(QDialog):
             item_res.setFlags(item_res.flags() ^ Qt.ItemIsEditable)
 
             self.tbl_evaluacion.setItem(fila, COL_RES, item_res)
+            self.recalcular_regla_3x()
 
 
     def actualizar_tabla_evaluacion(self, mes, resultados):
@@ -1223,6 +1336,23 @@ class FormularioEvaluacion(QDialog):
             self.txt_impuesto_renta.setText(str(dialog.resultado))
 
 
+    def _calcular_resultado_evaluacion(self) -> tuple[str, dict]:
+        """
+        Retorna: (resultado, res_regla)
+        - resultado: 'Aprobado' | 'Rechazado' | 'Pendiente'
+        - res_regla: dict con veces_renta, renta_minima, califica
+        """
+        arriendo = self.get_int(self.txt_monto_arriendo.text())
+        renta = self._obtener_renta_calculada_actual()
+
+        # si no hay datos suficientes, queda pendiente
+        if arriendo <= 0 or renta <= 0:
+            return "Pendiente", {"veces_renta": 0.0, "renta_minima": 0.0, "califica": False}
+
+        res = regla_3x_renta(renta, arriendo, minimo=3.0)
+        resultado = "Aprobado" if res["califica"] else "Rechazado"
+        return resultado, res
+
     def cargar_resultado_final_evaluacion(self, eva):
         """
         evaluacion: dict que viene desde la BD
@@ -1291,14 +1421,10 @@ class FormularioEvaluacion(QDialog):
 
         for row in range(12):
             try:
-                iva_debito = float(
-                    (self.tbl_independiente.item(row, 1).text() or "0")
-                    .replace(".", "").replace(",", ".")
-                )
-                iva_credito = float(
-                    (self.tbl_independiente.item(row, 2).text() or "0")
-                    .replace(".", "").replace(",", ".")
-                )
+
+                iva_debito = self.parse_num(self.tbl_independiente.item(row, 1).text() if self.tbl_independiente.item(row, 1) else "0")
+                iva_credito = self.parse_num(self.tbl_independiente.item(row, 2).text() if self.tbl_independiente.item(row, 2) else "0")
+            
             except (ValueError, AttributeError):
                 continue
 
@@ -1528,6 +1654,20 @@ class FormularioEvaluacion(QDialog):
         self.toggle_evaluacion_tab(tipo)
         self.toggle_evaluacion_independiente_tab(tipo)
 
+
+        eva_madre = data.get("evaluacion", data)  # por si vienen en root
+
+        monto = eva_madre.get("monto_arriendo_objetivo", 0) or 0
+        veces = eva_madre.get("veces_renta", 0) or 0
+        renta_min = eva_madre.get("renta_minima", 0) or 0
+
+        # si son QLineEdit:
+        self.txt_monto_arriendo.setText(f"{monto:,.0f}")
+
+        # si son QLabel (o QLineEdit igual sirve):
+        self.txt_veces_renta.setText(f"{veces:,.2f}")
+        self.txt_renta_minima.setText(f"{renta_min:,.0f}")
+
         # =========================
         # DEPENDIENTE
         # =========================
@@ -1571,14 +1711,15 @@ class FormularioEvaluacion(QDialog):
                 self.tbl_independiente.item(0, 1)
             )
 
+        self.recalcular_regla_3x()
+
     
     def guardar_evaluacion(self):
         try:
             valores_tabla = {}
-            
 
+            # 1) Validar arrendatario seleccionado
             arr = self.combo_arrendatario.currentData()
-
             if not arr:
                 QMessageBox.warning(self, "Error", "Debe seleccionar un arrendatario.")
                 return
@@ -1586,72 +1727,75 @@ class FormularioEvaluacion(QDialog):
             tipo = arr["tipo_trabajador"]
             rut = arr["rut"]
 
+            # 2) Construir dict base (UNA SOLA VEZ)
             data_evaluacion = {
-                'arrendatario':{
-                    'rut':rut,
-                    'tipo_trabajador':tipo
+                "arrendatario": {
+                    "rut": rut,
+                    "tipo_trabajador": tipo
                 }
             }
-                
+
+            # 3) Calcular renta + regla 3x (ahora sí, con data_evaluacion ya creado)
+            arriendo = self.get_int(self.txt_monto_arriendo.text())
+            renta = self._obtener_renta_calculada_actual()
+            res = regla_3x_renta(renta, arriendo, minimo=3.0)
+            resultado, res = self._calcular_resultado_evaluacion()
+
+            # Guardar extras en el dict principal
+            data_evaluacion["resultado"] = resultado
+            data_evaluacion["monto_arriendo_objetivo"] = arriendo
+            data_evaluacion["veces_renta"] = res["veces_renta"]
+            data_evaluacion["renta_minima"] = res["renta_minima"]
+            data_evaluacion["resultado"] = "Aprobado" if res["califica"] else "Rechazado"
+
+            # 4) Construir payload según tipo
             if tipo == "Dependiente":
                 valores_tabla = self.obtener_diccionario_evaluacion()
-                
-                data_evaluacion['evaluacion_arrendatario'] = {
-                    'fecha_evaluacion': self.fecha_evaluacion_arrendatario.date().toString("yyyy-MM-dd"),
-                    'sueldo_base': self.get_int(valores_tabla.get('sueldo_base', 0)),
-                    'gratificacion': self.get_int(valores_tabla.get('gratificacion', 0)),
-                    'total_imponible': self.get_int(valores_tabla.get('total_imponible', 0)),
-                    'total_no_imponible': self.get_int(valores_tabla.get('total_no_imponible', 0)),
-                    'descuentos_legales': self.get_int(valores_tabla.get('descuentos_legales', 0)),
-                    'liquido_pago': self.get_int(valores_tabla.get('liquido_pago', 0)),
-                    'anticipo': self.get_int(valores_tabla.get('anticipo', 0)),
-                    'total_haberes':self.get_int(valores_tabla.get('total_haberes', 0)),
-                    'desc_varios': self.get_int(valores_tabla.get('desc_varios', 0)),
-                    'locomocion': self.get_int(valores_tabla.get('locomocion', 0)),
-                    'im_renta': self.get_int(self.txt_impuesto_renta.text())
+
+                data_evaluacion["evaluacion_arrendatario"] = {
+                    "fecha_evaluacion": self.fecha_evaluacion_arrendatario.date().toString("yyyy-MM-dd"),
+                    "sueldo_base": self.get_int(valores_tabla.get("sueldo_base", 0)),
+                    "gratificacion": self.get_int(valores_tabla.get("gratificacion", 0)),
+                    "total_imponible": self.get_int(valores_tabla.get("total_imponible", 0)),
+                    "total_no_imponible": self.get_int(valores_tabla.get("total_no_imponible", 0)),
+                    "descuentos_legales": self.get_int(valores_tabla.get("descuentos_legales", 0)),
+                    "liquido_pago": self.get_int(valores_tabla.get("liquido_pago", 0)),
+                    "anticipo": self.get_int(valores_tabla.get("anticipo", 0)),
+                    "total_haberes": self.get_int(valores_tabla.get("total_haberes", 0)),
+                    "desc_varios": self.get_int(valores_tabla.get("desc_varios", 0)),
+                    "locomocion": self.get_int(valores_tabla.get("locomocion", 0)),
+                    "im_renta": self.get_int(self.txt_impuesto_renta.text()),
                 }
 
-            if tipo == "Independiente":
+            elif tipo == "Independiente":
                 evaluacion = self.obtener_diccionario_evaluacion_independiente()
 
-                data_evaluacion['evaluacion_independiente'] = {
-                    'periodo_desde': date.today().isoformat(),
-                    'factor_castigo': CASTIGO_DEFAULT,
-                    
-
-                    # ⬇️ SOLO RESUMEN
-                    **evaluacion['resumen']
+                data_evaluacion["evaluacion_independiente"] = {
+                    "periodo_desde": date.today().isoformat(),
+                    "factor_castigo": CASTIGO_DEFAULT,
+                    **evaluacion["resumen"],  # NO cambia tus claves
                 }
 
-                # ⬇️ DETALLE VA APARTE
-                data_evaluacion['evaluacion_independiente_detalle'] = evaluacion['detalle']
-
-
-            if self.evaluacion_id:
-
-                ok = editar_evaluacion(self.evaluacion_id, data_evaluacion)
-
-                if ok:
-                    QMessageBox.information(
-                        self,
-                        "Actualizado",
-                        "La evaluación se actualizó correctamente."
-                    )
-                    self.evaluacion_guardada.emit()
-                    self.accept()
+                data_evaluacion["evaluacion_independiente_detalle"] = evaluacion["detalle"]
 
             else:
+                QMessageBox.warning(self, "Error", "Tipo de trabajador no válido.")
+                return
 
-                eval_id = guardar_evaluacion(data_evaluacion)
-
-                if eval_id:
-                    QMessageBox.information(
-                        self,
-                        "Éxito",
-                        f"Evaluación creada correctamente.\n\nID: {eval_id}"
-                    )
+            # 5) Guardar / Editar
+            if self.evaluacion_id:
+                ok = editar_evaluacion(self.evaluacion_id, data_evaluacion)
+                if ok:
+                    QMessageBox.information(self, "Actualizado", "La evaluación se actualizó correctamente.")
                     self.evaluacion_guardada.emit()
                     self.accept()
+            else:
+                eval_id = guardar_evaluacion(data_evaluacion)
+                if eval_id:
+                    QMessageBox.information(self, "Éxito", f"Evaluación creada correctamente.\n\nID: {eval_id}")
+                    self.evaluacion_guardada.emit()
+                    self.accept()
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo guardar la evaluación: {str(e)}")
 

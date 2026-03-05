@@ -45,8 +45,6 @@ def guardar_arriendo(data_arriendo):
         if not data_arriendo.get('propiedad',{}).get('codigo'):
             raise ValueError("El código de la propiedad es obligatorio")
         
-        tipo_trabajador = data_arriendo['arrendatario'].get('tipo_trabajador','')
-        
 
         propiedad_data = {
             'codigo_interno': data_arriendo['propiedad']['codigo'],
@@ -70,105 +68,6 @@ def guardar_arriendo(data_arriendo):
 
         supabase.table("arrendador").upsert(arrendador_data,
                                             on_conflict="rut").execute()
-        
-        arrendatario_data = {
-                 'rut': data_arriendo['arrendatario'].get('rut',''),
-                 'nombre': data_arriendo['arrendatario'].get('nombre','') ,
-                 'telefono': data_arriendo['arrendatario'].get('telefono','') ,
-                 'email': data_arriendo['arrendatario'].get('email','') ,
-                 'direccion': data_arriendo['arrendatario'].get('direccion',''),
-                 'tipo_trabajador': data_arriendo['arrendatario'].get('tipo_trabajador','Dependiente'),
-                 'antiguedad_laboral': int(data_arriendo['arrendatario'].get('antiguedad_laboral') or 0),
-                 'dicom': data_arriendo['arrendatario'].get('dicom','Sí'),
-                 'comentarios': data_arriendo['arrendatario'].get('comentarios',''),
-                 'renta': safe_numeric(data_arriendo['arrendatario'].get('renta')),
-                 'evaluacion_estado':data_arriendo['arrendatario'].get('evaluacion_estado')
-
-
-        }
-    
-        supabase.table("arrendatario").upsert(arrendatario_data, 
-                                              on_conflict="rut").execute()
-        
-        if tipo_trabajador == "Dependiente":
-
-            evaluacion_data = {
-                'rut_arrendatario': data_arriendo['arrendatario']['rut'],
-                'tipo': data_arriendo['arrendatario'].get('tipo_trabajador','Dependiente'),
-                'estado': 'Borrador'
-            }
-
-            resp = supabase.table("evaluacion").insert(evaluacion_data).execute()
-
-            eval_id = resp.data[0]["id"]
-            
-
-            evaluacion_arrendatario_data = {
-                'evaluacion_id': eval_id,
-                'fecha_evaluacion': data_arriendo['evaluacion_arrendatario'].get('fecha_evaluacion'),
-                'sueldo_base': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('sueldo_base')),
-                'gratificacion': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('gratificacion')),
-                'total_imponible': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('total_imponible')),
-                'total_no_imponible': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('total_no_imponible')),
-                'descuentos_legales': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('descuentos_legales')),
-                'liquido_pago': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('liquido_pago')),
-                'anticipo': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('anticipo')),
-                'desc_varios': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('desc_varios')),
-                'locomocion': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('locomocion')),
-                'im_renta': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('im_renta')),
-            }
-
-
-
-            supabase.table("evaluacion_arrendatario").upsert(evaluacion_arrendatario_data).execute()
-        
-        if tipo_trabajador == "Independiente":
-
-            # 1️⃣ Crear evaluacion (tabla padre)
-            evaluacion_data = {
-                'rut_arrendatario': data_arriendo['arrendatario']['rut'],
-                'tipo': 'Independiente',
-                'estado': 'Borrador'
-            }
-
-            resp = supabase.table("evaluacion").insert(evaluacion_data).execute()
-            eval_id = resp.data[0]["id"]
-
-            
-
-            # 2️⃣ Insertar datos generales independiente
-            eval_data = data_arriendo['evaluacion_independiente']
-
-            evaluacion_independiente_data = {
-                'evaluacion_id': eval_id,   # ✅ correcto
-                'periodo_desde': eval_data['periodo_desde'],
-                'factor_castigo': safe_numeric(eval_data.get('factor_castigo')),
-                'ventas_anuales': safe_numeric(eval_data.get('ventas_anuales')),
-                'compras_anuales': safe_numeric(eval_data.get('compras_anuales')),
-                'excedente_anual': safe_numeric(eval_data.get('excedente_anual')),
-                'renta_anual_estimada': safe_numeric(eval_data.get('renta_anual_estimada')),
-                'renta_mensual_estimada': safe_numeric(eval_data.get('renta_mensual_estimada')),
-            }
-
-            supabase.table("evaluacion_independiente").insert(
-                evaluacion_independiente_data
-            ).execute()
-
-            # 3️⃣ Insertar detalle mensual
-            detalle = data_arriendo['evaluacion_independiente_detalle']
-
-    
-            for mes in detalle:
-                supabase.table("evaluacion_independiente_detalle").insert({
-                    'evaluacion_id': eval_id,   # ✅ AQUÍ ESTÁ LA CLAVE
-                    'periodo': mes['periodo'],
-                    'iva_debito': safe_numeric(mes.get('iva_debito')),
-                    'iva_credito': safe_numeric(mes.get('iva_credito')),
-                    'ventas_netas_estimadas': safe_numeric(mes.get('ventas_netas_estimadas')),
-                    'compras_netas_estimadas': safe_numeric(mes.get('compras_netas_estimadas'))
-                }).execute()
-
-
 
         arriendo_data = {
              'codigo_interno': data_arriendo['propiedad']['codigo'],
