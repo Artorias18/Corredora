@@ -81,7 +81,8 @@ def guardar_arriendo(data_arriendo):
                  'antiguedad_laboral': int(data_arriendo['arrendatario'].get('antiguedad_laboral') or 0),
                  'dicom': data_arriendo['arrendatario'].get('dicom','Sí'),
                  'comentarios': data_arriendo['arrendatario'].get('comentarios',''),
-                 'renta': safe_numeric(data_arriendo['arrendatario'].get('renta'))
+                 'renta': safe_numeric(data_arriendo['arrendatario'].get('renta')),
+                 'evaluacion_estado':data_arriendo['arrendatario'].get('evaluacion_estado')
 
 
         }
@@ -90,8 +91,20 @@ def guardar_arriendo(data_arriendo):
                                               on_conflict="rut").execute()
         
         if tipo_trabajador == "Dependiente":
+
+            evaluacion_data = {
+                'rut_arrendatario': data_arriendo['arrendatario']['rut'],
+                'tipo': data_arriendo['arrendatario'].get('tipo_trabajador','Dependiente'),
+                'estado': 'Borrador'
+            }
+
+            resp = supabase.table("evaluacion").insert(evaluacion_data).execute()
+
+            eval_id = resp.data[0]["id"]
+            
+
             evaluacion_arrendatario_data = {
-                'rut_arrendatario': data_arriendo['arrendatario'].get('rut',''),
+                'evaluacion_id': eval_id,
                 'fecha_evaluacion': data_arriendo['evaluacion_arrendatario'].get('fecha_evaluacion'),
                 'sueldo_base': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('sueldo_base')),
                 'gratificacion': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('gratificacion')),
@@ -103,17 +116,31 @@ def guardar_arriendo(data_arriendo):
                 'desc_varios': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('desc_varios')),
                 'locomocion': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('locomocion')),
                 'im_renta': safe_numeric(data_arriendo['evaluacion_arrendatario'].get('im_renta')),
-                
             }
+
+
 
             supabase.table("evaluacion_arrendatario").upsert(evaluacion_arrendatario_data).execute()
         
         if tipo_trabajador == "Independiente":
 
+            # 1️⃣ Crear evaluacion (tabla padre)
+            evaluacion_data = {
+                'rut_arrendatario': data_arriendo['arrendatario']['rut'],
+                'tipo': 'Independiente',
+                'estado': 'Borrador'
+            }
+
+            resp = supabase.table("evaluacion").insert(evaluacion_data).execute()
+            eval_id = resp.data[0]["id"]
+
+            
+
+            # 2️⃣ Insertar datos generales independiente
             eval_data = data_arriendo['evaluacion_independiente']
 
             evaluacion_independiente_data = {
-                'rut_arrendatario': eval_data['rut_arrendatario'],
+                'evaluacion_id': eval_id,   # ✅ correcto
                 'periodo_desde': eval_data['periodo_desde'],
                 'factor_castigo': safe_numeric(eval_data.get('factor_castigo')),
                 'ventas_anuales': safe_numeric(eval_data.get('ventas_anuales')),
@@ -123,28 +150,23 @@ def guardar_arriendo(data_arriendo):
                 'renta_mensual_estimada': safe_numeric(eval_data.get('renta_mensual_estimada')),
             }
 
-            eval_resp = (
-                supabase
-                .table("evaluacion_independiente")
-                .insert(evaluacion_independiente_data)
-                .execute()
-            )
+            supabase.table("evaluacion_independiente").insert(
+                evaluacion_independiente_data
+            ).execute()
 
-            evaluacion_id = eval_resp.data[0]['id']
-
+            # 3️⃣ Insertar detalle mensual
             detalle = data_arriendo['evaluacion_independiente_detalle']
 
+    
             for mes in detalle:
                 supabase.table("evaluacion_independiente_detalle").insert({
-                    'evaluacion_id': evaluacion_id,
+                    'evaluacion_id': eval_id,   # ✅ AQUÍ ESTÁ LA CLAVE
                     'periodo': mes['periodo'],
                     'iva_debito': safe_numeric(mes.get('iva_debito')),
                     'iva_credito': safe_numeric(mes.get('iva_credito')),
                     'ventas_netas_estimadas': safe_numeric(mes.get('ventas_netas_estimadas')),
                     'compras_netas_estimadas': safe_numeric(mes.get('compras_netas_estimadas'))
                 }).execute()
-
-
 
 
 

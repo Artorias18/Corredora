@@ -54,7 +54,7 @@ class DetalleArriendoWindow(QWidget):
 
         self.setup_tab_propiedad()
        
-        self.setup_tab_evaluacion()
+        
     
         self.setup_tab_arriendo()
       
@@ -146,44 +146,6 @@ class DetalleArriendoWindow(QWidget):
             if value:
                 layout.addRow(QLabel(f"<b>{label}:</b>"), QLabel(str(value)))
 
-
-    def setup_tab_evaluacion(self):
-        tab = QWidget()
-        self.tabs.addTab(tab, "Evaluación Arriendo")
-        layout = QFormLayout(tab)
-
-        arriendo = self.detalle_arriendo.get('arrendatario', {})
-        rut = arriendo.get("rut", "")
-
-        evaluacion = obtener_ultima_evaluacion_arrendatario(rut) or {}
-
-        campos = [
-            ("Fecha de Evaluación:", evaluacion.get('fecha_evaluacion')),
-            ("Sueldo Base::", evaluacion.get('sueldo_base')),
-            ("Gratificación:", evaluacion.get('gratificacion')),
-            ("Total Imponible:", evaluacion.get('total_imponible')),
-            ("Total no Imponible:", evaluacion.get('total_no_imponible')),
-            ("Descuentos Legales:", evaluacion.get('descuentos_legales')),
-            ("Impuesto Renta:", evaluacion.get('im_renta')),
-            ("Total Haberes:", evaluacion.get('total_haberes')),
-            ("Líquido a Pago:", evaluacion.get('liquido_pago')),
-            ("Anticipo:", evaluacion.get('anticipo')),
-            ("Descuentos Varios:", evaluacion.get('desc_varios')),
-            ("Locomoción:", evaluacion.get('locomocion')),
-        ]
-
-        for nombre, valor in campos:
-            lbl_izq = QLabel(nombre)
-
-            if isinstance(valor, (int, float)):
-                texto = f"${int(valor):,}".replace(",", ".")
-            else:
-                texto = str(valor) if valor is not None else ""
-
-            lbl_der = QLabel(texto)
-
-            layout.addRow(lbl_izq, lbl_der)
-            
     def setup_tab_arriendo(self):
         tab = QWidget()
         self.tabs.addTab(tab, "Arriendo")
@@ -512,6 +474,14 @@ class DashboardArriendos(QWidget):
         self.tabla_arriendos.itemSelectionChanged.connect(self.habilitar_boton_gastos)
         
         layout.addWidget(self.tabla_arriendos)
+
+        self.tabla_arriendos.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #D5D8DC;
+                color: black;
+            }
+        """)
+
 
         self.tabla_arriendos.resizeColumnsToContents()
 
@@ -2055,18 +2025,6 @@ class FormularioArriendo(QWidget):
                 )
 
             # ===============================
-            # EVALUACIÓN
-            # ===============================
-            rut = self.txt_arrendatario_rut.text().strip()
-            if rut:
-                evaluacion = obtener_ultima_evaluacion_arrendatario(rut)
-
-                if isinstance(evaluacion, dict):
-                    self.cargar_resultado_final_evaluacion(evaluacion)
-                    set_date(self.fecha_evaluacion_arrendatario, evaluacion.get("fecha_evaluacion"))
-                    set_text(self.txt_impuesto_renta, evaluacion.get("im_renta"))
-
-            # ===============================
             # ARRIENDO
             # ===============================
             arriendo = self.detalle_arriendo.get('arriendo', {})
@@ -2536,6 +2494,7 @@ class FormularioArriendo(QWidget):
                     'rut_arrendatario': self.txt_arrendatario_rut.text(),
                     'periodo_desde': date.today().isoformat(),
                     'factor_castigo': CASTIGO_DEFAULT,
+                    
 
                     # ⬇️ SOLO RESUMEN
                     **evaluacion['resumen']

@@ -120,3 +120,371 @@ def obtener_evaluaciones_arrendatario():
     return resp.data or []
 
 
+def cargar_detalle_dependiente(eval_id):
+    resp = supabase.rpc(
+        "obtener_eval_dependiente_detalle",
+        {"p_eval_id": eval_id}
+    ).execute()
+
+    return resp.data
+
+
+def obtener_detalle_evaluacion(tipo, eval_id):
+
+    if tipo == "Independiente":
+        return cargar_detalle(eval_id)
+
+    if tipo == "Dependiente":
+        return cargar_detalle_dependiente(eval_id)
+
+    return []
+
+
+IVA_FACTOR = 0.19
+CASTIGO_DEFAULT = 0.6
+
+
+def calcular_evaluacion_independiente(meses, factor=CASTIGO_DEFAULT):
+        ventas_anuales = 0
+        compras_anuales = 0
+        detalle = []
+
+        for mes in meses:
+            ventas = mes["iva_debito"] / IVA_FACTOR
+            compras = mes["iva_credito"] / IVA_FACTOR
+            excedente = ventas - compras
+
+            ventas_anuales += ventas
+            compras_anuales += compras
+
+            detalle.append({
+                "ventas": ventas,
+                "compras": compras,
+                "excedente": excedente
+            })
+
+        excedente_anual = max(ventas_anuales - compras_anuales, 0)
+        renta_anual = excedente_anual * factor
+        renta_mensual = renta_anual / 12
+
+        return {
+            "ventas_anuales": ventas_anuales,
+            "compras_anuales": compras_anuales,
+            "excedente_anual": excedente_anual,
+            "renta_mensual": renta_mensual,
+            "detalle": detalle
+        }
+
+def guardar_evaluacion(data_evaluacion):
+    try:
+        
+        tipo_trabajador = data_evaluacion['arrendatario'].get('tipo_trabajador','')
+        
+        
+        if tipo_trabajador == "Dependiente":
+
+            evaluacion_data = {
+                'rut_arrendatario': data_evaluacion['arrendatario']['rut'],
+                'tipo': data_evaluacion['arrendatario'].get('tipo_trabajador','Dependiente'),
+                'estado': 'Borrador'
+            }
+
+            resp = supabase.table("evaluacion").insert(evaluacion_data).execute()
+
+            eval_id = resp.data[0]["id"]
+            
+            
+
+            evaluacion_arrendatario_data = {
+                'evaluacion_id': eval_id,
+                'fecha_evaluacion': data_evaluacion['evaluacion_arrendatario'].get('fecha_evaluacion'),
+                'sueldo_base': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('sueldo_base')),
+                'gratificacion': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('gratificacion')),
+                'total_imponible': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('total_imponible')),
+                'total_no_imponible': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('total_no_imponible')),
+                'descuentos_legales': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('descuentos_legales')),
+                'liquido_pago': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('liquido_pago')),
+                'total_haberes': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('total_haberes')),
+                'anticipo': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('anticipo')),
+                'desc_varios': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('desc_varios')),
+                'locomocion': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('locomocion')),
+                'im_renta': safe_numeric(data_evaluacion['evaluacion_arrendatario'].get('im_renta')),
+            }
+
+
+            print("evaluacion",evaluacion_arrendatario_data)
+
+            supabase.table("evaluacion_arrendatario").upsert(evaluacion_arrendatario_data).execute()
+        
+        if tipo_trabajador == "Independiente":
+
+            # 1️⃣ Crear evaluacion (tabla padre)
+            evaluacion_data = {
+                'rut_arrendatario': data_evaluacion['arrendatario']['rut'],
+                'tipo': data_evaluacion['arrendatario'].get('tipo_trabajador','Dependiente'),
+                'estado': 'Borrador'
+            }
+
+            resp = supabase.table("evaluacion").insert(evaluacion_data).execute()
+            eval_id = resp.data[0]["id"]
+
+            
+
+            # 2️⃣ Insertar datos generales independiente
+            eval_data = data_evaluacion['evaluacion_independiente']
+
+            evaluacion_independiente_data = {
+                'evaluacion_id': eval_id,   # ✅ correcto
+                'periodo_desde': eval_data['periodo_desde'],
+                'factor_castigo': safe_numeric(eval_data.get('factor_castigo')),
+                'ventas_anuales': safe_numeric(eval_data.get('ventas_anuales')),
+                'compras_anuales': safe_numeric(eval_data.get('compras_anuales')),
+                'excedente_anual': safe_numeric(eval_data.get('excedente_anual')),
+                'renta_anual_estimada': safe_numeric(eval_data.get('renta_anual_estimada')),
+                'renta_mensual_estimada': safe_numeric(eval_data.get('renta_mensual_estimada')),
+            }
+
+            supabase.table("evaluacion_independiente").insert(
+                evaluacion_independiente_data
+            ).execute()
+
+            # 3️⃣ Insertar detalle mensual
+            detalle = data_evaluacion['evaluacion_independiente_detalle']
+
+    
+            for mes in detalle:
+                supabase.table("evaluacion_independiente_detalle").insert({
+                    'evaluacion_id': eval_id,   # ✅ AQUÍ ESTÁ LA CLAVE
+                    'periodo': mes['periodo'],
+                    'iva_debito': safe_numeric(mes.get('iva_debito')),
+                    'iva_credito': safe_numeric(mes.get('iva_credito')),
+                    'ventas_netas_estimadas': safe_numeric(mes.get('ventas_netas_estimadas')),
+                    'compras_netas_estimadas': safe_numeric(mes.get('compras_netas_estimadas'))
+                }).execute()
+
+
+        if not resp.data:
+            raise Exception("No se pudo guardar el arriendo")
+
+        
+        return eval_id
+
+
+                
+    except Exception as e:
+        print(f"Error detallado al guardar la evaluación: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+    
+
+
+def editar_evaluacion(eval_id, data_evaluacion):
+    try:
+        # 1️⃣ Verificar estado y tipo
+        resp = (
+            supabase
+            .table("evaluacion")
+            .select("estado, tipo")
+            .eq("id", eval_id)
+            .single()
+            .execute()
+        )
+
+        if not resp.data:
+            raise Exception("Evaluación no encontrada")
+
+        if resp.data["estado"] != "Borrador":
+            raise Exception("No se puede editar una evaluación finalizada")
+
+        tipo = resp.data["tipo"]
+
+        # =========================
+        # DEPENDIENTE
+        # =========================
+        if tipo == "Dependiente":
+
+            datos = data_evaluacion["evaluacion_arrendatario"]
+
+            supabase.table("evaluacion_arrendatario") \
+                .update({
+                    'fecha_evaluacion': datos.get('fecha_evaluacion'),
+                    'sueldo_base': safe_numeric(datos.get('sueldo_base')),
+                    'gratificacion': safe_numeric(datos.get('gratificacion')),
+                    'total_imponible': safe_numeric(datos.get('total_imponible')),
+                    'total_no_imponible': safe_numeric(datos.get('total_no_imponible')),
+                    'descuentos_legales': safe_numeric(datos.get('descuentos_legales')),
+                    'liquido_pago': safe_numeric(datos.get('liquido_pago')),
+                    'anticipo': safe_numeric(datos.get('anticipo')),
+                    'desc_varios': safe_numeric(datos.get('desc_varios')),
+                    'total_haberes': safe_numeric(datos.get('total_haberes')),
+                    'locomocion': safe_numeric(datos.get('locomocion')),
+                    'im_renta': safe_numeric(datos.get('im_renta')),
+                }) \
+                .eq("evaluacion_id", eval_id) \
+                .execute()
+
+        # =========================
+        # INDEPENDIENTE
+        # =========================
+        if tipo == "Independiente":
+
+            resumen = data_evaluacion["evaluacion_independiente"]
+            detalle = data_evaluacion["evaluacion_independiente_detalle"]
+
+            # 1️⃣ Actualizar resumen
+            # 1️⃣ Obtener ID real de evaluacion_independiente
+            resp_ind = (
+                supabase
+                .table("evaluacion_independiente")
+                .select("id")
+                .eq("evaluacion_id", eval_id)
+                .single()
+                .execute()
+            )
+
+            independiente_id = resp_ind.data["id"]
+
+            # 2️⃣ Borrar detalle usando independiente_id
+            supabase.table("evaluacion_independiente_detalle") \
+                .delete() \
+                .eq("evaluacion_id", independiente_id) \
+                .execute()
+
+            # 3️⃣ Insertar detalle nuevo usando independiente_id
+            for mes in detalle:
+                supabase.table("evaluacion_independiente_detalle").insert({
+                    'evaluacion_id': independiente_id,
+                    'periodo': mes['periodo'],
+                    'iva_debito': safe_numeric(mes.get('iva_debito')),
+                    'iva_credito': safe_numeric(mes.get('iva_credito')),
+                    'ventas_netas_estimadas': safe_numeric(mes.get('ventas_netas_estimadas')),
+                    'compras_netas_estimadas': safe_numeric(mes.get('compras_netas_estimadas'))
+                }).execute()
+
+        return True
+
+    except Exception as e:
+        print("Error al editar evaluación:", str(e))
+        return False
+    
+
+def eliminar_evaluacion(eval_id):
+    try:
+        resp = (
+            supabase
+            .table("evaluacion")
+            .select("estado")
+            .eq("id", eval_id)
+            .single()
+            .execute()
+        )
+
+        if not resp.data:
+            raise Exception("Evaluación no encontrada")
+
+        if resp.data["estado"] != "Borrador":
+            raise Exception("No se puede eliminar una evaluación finalizada")
+
+        # ON DELETE CASCADE se encarga de todo
+        supabase.table("evaluacion") \
+            .delete() \
+            .eq("id", eval_id) \
+            .execute()
+
+        return True
+
+    except Exception as e:
+        print("Error al eliminar evaluación:", str(e))
+        return False
+    
+
+
+def obtener_evaluacion_completa(eval_id: int):
+
+    try:
+        # =====================================
+        # 1️⃣ TRAER TABLA PRINCIPAL evaluacion
+        # =====================================
+        resp_eval = (
+            supabase
+            .table("evaluacion")
+            .select("*")
+            .eq("id", eval_id)
+            .single()
+            .execute()
+        )
+
+        if not resp_eval.data:
+            return None
+
+        evaluacion = resp_eval.data
+        tipo = evaluacion["tipo"]
+
+        resultado = {
+            "evaluacion": evaluacion,
+            "arrendatario": {
+                "rut": evaluacion["rut_arrendatario"],
+                "tipo_trabajador": tipo
+            }
+        }
+
+        # =====================================
+        # 2️⃣ SI ES DEPENDIENTE
+        # =====================================
+        if tipo == "Dependiente":
+
+            resp_dep = (
+                supabase
+                .table("evaluacion_arrendatario")
+                .select("*")
+                .eq("evaluacion_id", eval_id)
+                .single()
+                .execute()
+            )
+
+            resultado["evaluacion_arrendatario"] = resp_dep.data or {}
+
+        # =====================================
+        # 3️⃣ SI ES INDEPENDIENTE
+        # =====================================
+        if tipo == "Independiente":
+
+            # 3.1 Traer resumen
+            resp_ind = (
+                supabase
+                .table("evaluacion_independiente")
+                .select("*")
+                .eq("evaluacion_id", eval_id)
+                .single()
+                .execute()
+            )
+
+            independiente = resp_ind.data
+
+            if not independiente:
+                resultado["evaluacion_independiente"] = {}
+                resultado["evaluacion_independiente_detalle"] = []
+                return resultado
+
+            resultado["evaluacion_independiente"] = independiente
+
+            independiente_id = independiente["id"]
+
+            # 3.2 Traer detalle (ojo: referencia a evaluacion_independiente.id)
+            resp_det = (
+                supabase
+                .table("evaluacion_independiente_detalle")
+                .select("*")
+                .eq("evaluacion_id", eval_id)  # 👈 FK real de la tabla
+                .order("periodo")
+                .execute()
+            )
+
+            resultado["evaluacion_independiente_detalle"] = resp_det.data or []
+
+        return resultado
+
+    except Exception as e:
+        print("Error obteniendo evaluación completa:", str(e))
+        return None

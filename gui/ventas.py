@@ -616,6 +616,14 @@ class DashboardVentas(QWidget):
         self.tabla_ventas.itemDoubleClicked.connect(self.mostrar_detalle_venta)
         
         main_layout.addWidget(self.tabla_ventas)
+
+        self.tabla_ventas.setStyleSheet("""
+            QTableWidget::item:selected {
+                background-color: #D5D8DC;
+                color: black;
+            }
+        """)
+
         
         # Barra de botones
         button_layout = QHBoxLayout()
