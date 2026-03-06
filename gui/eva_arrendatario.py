@@ -693,7 +693,6 @@ class FormularioArrendatario(QDialog):
                 'dicom': self.cmb_dicom.currentText(),
                 'comentarios': self.txt_comentarios.toPlainText(),
                 'evaluacion_estado': self.cmb_evaluacion_estado.currentText(),
-                'fecha_evaluacion': self.fecha_evaluacion.date().toString("yyyy-MM-dd"),
                 'antiguedad_laboral': self.get_int(self.txt_antiguedad_laboral.text()),
                 'renta': self.get_int(self.txt_renta.text())
             }
@@ -1170,19 +1169,37 @@ class FormularioEvaluacion(QDialog):
 
         self.tbl_independiente.blockSignals(False)
 
+
+
     def cargar_meses_independiente(self):
-        MESES = [
-            "Enero", "Febrero", "Marzo", "Abril",
-            "Mayo", "Junio", "Julio", "Agosto",
-            "Septiembre", "Octubre", "Noviembre", "Diciembre"
-        ]
+        # Mes actual
+        hoy = QDate.currentDate()
 
-        for row, mes in enumerate(MESES):
-            item_mes = QTableWidgetItem(mes)
-            item_mes.setFlags(item_mes.flags() & ~Qt.ItemIsEditable)
-            item_mes.setTextAlignment(Qt.AlignCenter)
-            self.tbl_independiente.setItem(row, 0, item_mes)
+        primer_dia_mes_actual = QDate(hoy.year(), hoy.month(), 1)
+        primer_dia_mes_anterior = primer_dia_mes_actual.addMonths(-1)
+        inicio = primer_dia_mes_anterior.addMonths(-11)
 
+        self.tbl_independiente.blockSignals(True)
+        try:
+            for row in range(12):
+                periodo = inicio.addMonths(row)  # QDate
+
+                # Texto visible (puedes cambiar el formato)
+                texto = periodo.toString("MMM yyyy")  # ej: "Mar 2026" (depende locale)
+                # Alternativa más clara:
+                # texto = periodo.toString("yyyy-MM")
+
+                item_mes = QTableWidgetItem(texto)
+                item_mes.setFlags(item_mes.flags() & ~Qt.ItemIsEditable)
+                item_mes.setTextAlignment(Qt.AlignCenter)
+
+                # ✅ Guardamos el periodo real para usarlo después (clave del arreglo)
+                item_mes.setData(Qt.UserRole, periodo.toString("yyyy-MM-dd"))
+
+                self.tbl_independiente.setItem(row, 0, item_mes)
+
+        finally:
+            self.tbl_independiente.blockSignals(False)
 
 
     def actualizar_resumen_independiente(self, resultado):
@@ -1406,33 +1423,31 @@ class FormularioEvaluacion(QDialog):
             return 0.0
 
     def obtener_diccionario_evaluacion_independiente(self):
-        meses_map = {
-            0: "01", 1: "02", 2: "03", 3: "04",
-            4: "05", 5: "06", 6: "07", 7: "08",
-            8: "09", 9: "10", 10: "11", 11: "12"
-        }
-
         detalle = []
-        total_ventas = 0
-        total_compras = 0
-
-        hoy = date.today()
-        year = hoy.year
+        total_ventas = 0.0
+        total_compras = 0.0
 
         for row in range(12):
+            # ✅ obtener periodo desde la col 0
+            item_periodo = self.tbl_independiente.item(row, 0)
+            periodo = None
+            if item_periodo:
+                periodo = item_periodo.data(Qt.UserRole)  # "yyyy-MM-dd"
+
+            if not periodo:
+                # fallback por si no estuviera seteado (no debería)
+                # usa el texto visible si está en yyyy-MM
+                periodo = f"{QDate.currentDate().year()}-{row+1:02d}-01"
+
             try:
-
-                iva_debito = self.parse_num(self.tbl_independiente.item(row, 1).text() if self.tbl_independiente.item(row, 1) else "0")
-                iva_credito = self.parse_num(self.tbl_independiente.item(row, 2).text() if self.tbl_independiente.item(row, 2) else "0")
-            
+                iva_debito = float((self.tbl_independiente.item(row, 1).text() or "0").replace(".", "").replace(",", "."))
+                iva_credito = float((self.tbl_independiente.item(row, 2).text() or "0").replace(".", "").replace(",", "."))
             except (ValueError, AttributeError):
-                continue
+                iva_debito = 0.0
+                iva_credito = 0.0
 
-            # ✅ CÁLCULO REAL
             ventas = iva_debito / IVA_FACTOR
             compras = iva_credito / IVA_FACTOR
-
-            periodo = f"{year}-{meses_map[row]}-01"
 
             detalle.append({
                 'periodo': periodo,
@@ -1449,8 +1464,11 @@ class FormularioEvaluacion(QDialog):
         renta_anual = excedente * CASTIGO_DEFAULT
         renta_mensual = renta_anual / 12
 
+        # periodo_desde: primer periodo visible
+        periodo_desde = detalle[0]['periodo'] if detalle else QDate.currentDate().toString("yyyy-MM-dd")
+
         return {
-            'periodo_desde': hoy.isoformat(),
+            'periodo_desde': periodo_desde,
             'resumen': {
                 'ventas_anuales': total_ventas,
                 'compras_anuales': total_compras,
@@ -1460,6 +1478,8 @@ class FormularioEvaluacion(QDialog):
             },
             'detalle': detalle
         }
+    
+    
     from PySide6.QtWidgets import QFileDialog
 
     def obtener_ruta_excel(self):
