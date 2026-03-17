@@ -77,6 +77,7 @@ def guardar_arriendo(data_arriendo):
              'fecha_termino':data_arriendo['arriendo']['fecha_termino'] or None,
              'tipo_documento': data_arriendo['arriendo'].get('tipo_documento', 'Boleta'),
              'renta_mensual':safe_numeric(data_arriendo['arriendo'].get('renta_mensual')),
+             'direccion': data_arriendo['arriendo'].get('direccion', ''),
              'cuenta_fm': data_arriendo['arriendo'].get('cuenta_fm', '2'),
              'garantia':safe_numeric(data_arriendo['arriendo'].get('garantia')),
              'gastos_comunes_incluidos':data_arriendo['arriendo'].get('gastos_comunes_incluidos'),

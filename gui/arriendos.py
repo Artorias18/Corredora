@@ -114,7 +114,6 @@ class DetalleArriendoWindow(QWidget):
             ("Nombre:", arrendatario.get('nombre')),
             ("Rut:", arrendatario.get('rut')),
             ("Teléfono:", arrendatario.get('telefono')),
-            ("Dirección:", arrendatario.get('direccion')),
             ('Correo:', arrendatario.get('email')),
             ("Tipo de Trabajador:", arrendatario.get('tipo_trabajador')),
             ("Antigüedad Laboral:", arrendatario.get('antiguedad_laboral')),
@@ -180,6 +179,7 @@ class DetalleArriendoWindow(QWidget):
             ("Fecha de Término", arriendo.get("fecha_termino")),
             ("Renta Mensual", self.format_money(arriendo.get('renta_mensual'))),
             ("Garantía", self.format_money(arriendo.get('garantia'))),
+            ("Dirección:", arriendo.get('direccion')),
             ("Gastos comunes incluidos", "Sí" if arriendo.get("gastos_comunes_incluidos") else "No"),
             ("Estado del arriendo", arriendo.get("estado")),
             ("Tipo de contrato", arriendo.get("tipo_contrato")),
@@ -1265,7 +1265,6 @@ class FormularioArriendo(QWidget):
         if self.arriendo_id:
             self.txt_arrendatario_rut.setReadOnly(True)
             self.txt_arrendatario_rut.setStyleSheet("background:#f1f1f1;")
-        self.txt_arrendatario_direccion = QLineEdit()
         self.txt_arrendatario_telefono = QLineEdit()
         self.txt_arrendatario_email = QLineEdit()
 
@@ -1287,7 +1286,6 @@ class FormularioArriendo(QWidget):
         # Agregar campos
         layout.addRow(self.crear_label("Nombre:", True), self.txt_arrendatario_nombre)
         layout.addRow(self.crear_label("RUT:", True), self.txt_arrendatario_rut)
-        layout.addRow(self.crear_label("Dirección:"), self.txt_arrendatario_direccion)
         layout.addRow(self.crear_label("Teléfono:"), self.txt_arrendatario_telefono)
         layout.addRow(self.crear_label("Email:"), self.txt_arrendatario_email)
 
@@ -1330,7 +1328,6 @@ class FormularioArriendo(QWidget):
         self.txt_arrendatario_nombre.setText(a.get("nombre", ""))
         self.txt_arrendatario_telefono.setText(a.get("telefono", ""))
         self.txt_arrendatario_email.setText(a.get("email", ""))
-        self.txt_arrendatario_direccion.setText(a.get("direccion", ""))
 
         self.cmb_tipo_trabajador.setCurrentText(a.get("tipo_trabajador", "Dependiente"))
         self.txt_antiguedad_laboral.setText(str(a.get("antiguedad_laboral") or 0))
@@ -1394,6 +1391,8 @@ class FormularioArriendo(QWidget):
 
         self.txt_renta_mensual = QLineEdit()
         self.txt_garantia = QLineEdit()
+
+        self.txt_arriendo_direccion = QLineEdit()
 
         self.chk_gastos_comunes = QCheckBox("¿Gastos comunes incluidos?")
         self.chk_gastos_comunes.setChecked(False)
@@ -1476,6 +1475,7 @@ class FormularioArriendo(QWidget):
 
         layout_basicos.addRow(self.crear_label("Tipo de Documento"), self.cmb_tipo_documento)
         layout_basicos.addRow(self.crear_label("Renta Mensual:"), self.txt_renta_mensual)
+        layout_basicos.addRow(self.crear_label("Dirección:"), self.txt_arriendo_direccion)
         layout_basicos.addRow(self.crear_label("Garantía:"), self.txt_garantia)
         layout_basicos.addRow(self.chk_gastos_comunes)
         layout_basicos.addRow(self.crear_label("Estado del arriendo:"), self.cmb_estado_arriendo)
@@ -1631,7 +1631,6 @@ class FormularioArriendo(QWidget):
                 set_text(self.txt_arrendatario_nombre, arrendatario.get("nombre"))
                 set_text(self.txt_arrendatario_telefono, arrendatario.get("telefono"))
                 set_text(self.txt_arrendatario_email, arrendatario.get("email"))
-                set_text(self.txt_arrendatario_direccion, arrendatario.get("direccion"))
 
                 self.cmb_tipo_trabajador.setCurrentText(
                     arrendatario.get("tipo_trabajador", "Dependiente")
@@ -1660,6 +1659,7 @@ class FormularioArriendo(QWidget):
                 set_date(self.fecha_termino, arriendo.get("fecha_termino"))
 
                 set_money(self.txt_renta_mensual, arriendo.get("renta_mensual"))
+                set_text(self.txt_arriendo_direccion, arriendo.get("direccion"))
                 set_money(self.txt_garantia, arriendo.get("garantia"))
 
                 self.chk_gastos_comunes.setChecked(
@@ -1819,6 +1819,7 @@ class FormularioArriendo(QWidget):
                         ),
                     'tipo_documento':self.cmb_tipo_documento.currentText(),
                     'renta_mensual': self.get_int(self.txt_renta_mensual.text()),
+                    'direccion':self.txt_arriendo_direccion.text(),
                     'garantia': self.get_int(self.txt_garantia.text()),
                     'gastos_comunes_incluidos': self.chk_gastos_comunes.isChecked(),
                     'estado': self.cmb_estado_arriendo.currentText(),

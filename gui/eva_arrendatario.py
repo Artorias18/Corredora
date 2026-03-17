@@ -570,7 +570,6 @@ class FormularioArrendatario(QDialog):
         # Campos del arrendatario
         self.txt_arrendatario_nombre = QLineEdit()
         self.txt_arrendatario_rut = QLineEdit()
-        self.txt_arrendatario_direccion = QLineEdit()
         self.txt_arrendatario_telefono = QLineEdit()
         self.txt_arrendatario_email = QLineEdit()
         self.cmb_tipo_trabajador = QComboBox()
@@ -594,7 +593,6 @@ class FormularioArrendatario(QDialog):
         layout.addRow(self.crear_label("Nombre:", True), self.txt_arrendatario_nombre)
         layout.addRow(self.crear_label("RUT:", True), self.txt_arrendatario_rut)
         layout.addRow(self.crear_label("Dirección:"), self.txt_arrendatario_direccion)
-        layout.addRow(self.crear_label("Teléfono:"), self.txt_arrendatario_telefono)
         layout.addRow(self.crear_label("Email:"), self.txt_arrendatario_email)
         
         layout.addRow(self.crear_label("Tipo de Trabajador:"), self.cmb_tipo_trabajador)
@@ -688,7 +686,6 @@ class FormularioArrendatario(QDialog):
                 'nombre': self.txt_arrendatario_nombre.text(),
                 'telefono': self.txt_arrendatario_telefono.text(),
                 'email': self.txt_arrendatario_email.text(),
-                'direccion': self.txt_arrendatario_direccion.text(),
                 'tipo_trabajador': self.cmb_tipo_trabajador.currentText(),
                 'dicom': self.cmb_dicom.currentText(),
                 'comentarios': self.txt_comentarios.toPlainText(),
